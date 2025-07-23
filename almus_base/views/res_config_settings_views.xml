@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_almus_base_res_config_settings" model="ir.ui.view">
+        <field name="name">almus.base.res.config.settings.form</field>
+        <field name="model">res.config.settings</field>
+        <field name="inherit_id" ref="base.res_config_settings_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//form" position="inside">
+                <app data-string="Almus Dev" string="Almus Dev" name="almus_base">
+                    <block title="Ecosistema Almus" name="almus_setting_container">
+                        <div class="row">
+                            <div class="col-12">
+                                <!-- Header con logo y título -->
+                                <div class="d-flex align-items-center mb-3">
+                                    <img src="/almus_base/static/description/icon.png" 
+                                         alt="Almus Dev" 
+                                         style="width: 48px; height: 48px; margin-right: 16px;"
+                                         onerror="this.style.display='none'"/>
+                                    <div>
+                                        <h4 class="mb-0">Aplicaciones de Almus</h4>
+                                    </div>
+                                </div>
+                                
+                                <!-- Información -->
+                                <div class="alert alert-info">
+                                    <i class="fa fa-info-circle"/> 
+                                    Las aplicaciones Almus extienden las funcionalidades de Odoo de manera modular.
+                                </div>
+                            </div>
+                        </div>
+                    </block>
+                    
+                    <!-- Bloque donde otras apps pueden agregar sus configuraciones -->
+                    <block name="almus_app_settings">
+                        <!-- 
+                        Aquí cada aplicación Almus puede agregar sus propias configuraciones
+                        usando xpath para insertar dentro de este bloque
+                        -->
+                    </block>
+                </app>
+            </xpath>
+        </field>
+    </record>
+</odoo>

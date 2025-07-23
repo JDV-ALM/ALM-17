@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Heredar la vista de formulario de product.pricelist.item -->
+    <record id="product_pricelist_item_form_view_alt_cost" model="ir.ui.view">
+        <field name="name">product.pricelist.item.form.alt.cost</field>
+        <field name="model">product.pricelist.item</field>
+        <field name="inherit_id" ref="product.product_pricelist_item_form_view"/>
+        <field name="arch" type="xml">
+            <!-- Añadir información adicional cuando se selecciona alt_cost -->
+            <xpath expr="//field[@name='base_pricelist_id']" position="after">
+                <div class="alert alert-info" 
+                     role="alert" 
+                     invisible="base != 'alt_cost'">
+                    <h4 class="alert-heading">
+                        <i class="fa fa-info-circle"/> Alternative Cost Information
+                    </h4>
+                    <p class="mb-0">
+                        The price will be calculated based on the product's alternative cost.
+                        <br/>
+                        Make sure the alternative currency is configured in Settings.
+                    </p>
+                </div>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Vista de búsqueda mejorada -->
+    <record id="product_pricelist_item_search_alt_cost" model="ir.ui.view">
+        <field name="name">product.pricelist.item.search.alt.cost</field>
+        <field name="model">product.pricelist.item</field>
+        <field name="inherit_id" ref="product.product_pricelist_item_view_search"/>
+        <field name="arch" type="xml">
+            <xpath expr="//filter[@name='Variant Rule']" position="after">
+                <separator/>
+                <filter string="Based on Alt. Cost" 
+                        name="alt_cost_based" 
+                        domain="[('base', '=', 'alt_cost')]"
+                        groups="product.group_sale_pricelist"/>
+            </xpath>
+            <xpath expr="//filter[@name='groupby_product_variant']" position="after">
+                <filter string="Base" 
+                        name="groupby_base" 
+                        domain="[]" 
+                        context="{'group_by': 'base'}"
+                        groups="product.group_sale_pricelist"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>
