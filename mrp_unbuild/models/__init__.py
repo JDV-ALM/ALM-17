@@ -6,4 +6,4 @@ from . import mrp_production_unbuild
 from . import stock_move_unbuild
 from . import mrp_account_unbuild
 from . import stock_warehouse
-from . import res_config_settings
+from . import res_config_settings  # Agregado archivo faltante

@@ -2,7 +2,7 @@
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 from odoo import api, fields, models, _
-from odoo.tools import float_round, float_is_zero
+from odoo.tools import float_round, float_is_zero, float_compare
 from odoo.exceptions import UserError
 
 
@@ -31,6 +31,14 @@ class MrpProductionUnbuildAccount(models.Model):
         currency_field='currency_id'
     )
     
+    unbuild_unallocated_cost = fields.Monetary(
+        string='Unallocated Cost',
+        compute='_compute_unbuild_costs',
+        store=True,
+        currency_field='currency_id',
+        help="Cost not assigned to any output product"
+    )
+    
     currency_id = fields.Many2one(
         related='company_id.currency_id',
         string='Currency',
@@ -47,6 +55,7 @@ class MrpProductionUnbuildAccount(models.Model):
                 production.unbuild_total_cost = 0
                 production.unbuild_allocated_cost = 0
                 production.unbuild_waste_cost = 0
+                production.unbuild_unallocated_cost = 0
                 continue
             
             # Costo total del producto de entrada
@@ -64,8 +73,15 @@ class MrpProductionUnbuildAccount(models.Model):
                 allocated += production.unbuild_total_cost * yield_line.cost_share / 100
             production.unbuild_allocated_cost = allocated
             
-            # Costo de desperdicios
-            production.unbuild_waste_cost = production.unbuild_total_cost - allocated
+            # Costo de desperdicios (productos marcados como waste)
+            waste_cost = 0
+            for yield_line in production.unbuild_yield_line_ids.filtered('is_waste'):
+                # Los desperdicios tienen costo 0 por definición
+                waste_cost += 0
+            production.unbuild_waste_cost = waste_cost
+            
+            # Costo no asignado
+            production.unbuild_unallocated_cost = production.unbuild_total_cost - production.unbuild_allocated_cost
     
     def _cal_price(self, consumed_moves):
         """Override para calcular precios en desposte"""
@@ -83,11 +99,18 @@ class MrpProductionUnbuildAccount(models.Model):
         
         # Calcular costo total incluyendo work center costs si aplica
         work_center_cost = 0
-        for work_order in self.workorder_ids:
+        finished_wo = self.workorder_ids.filtered(lambda w: w.state == 'done')
+        for work_order in finished_wo:
             work_center_cost += work_order._cal_cost()
         
         # Costo base del producto + extra costs + work center
-        input_cost = abs(sum(consumed_moves.stock_valuation_layer_ids.mapped('value')))
+        input_cost = 0
+        if consumed_moves:
+            input_cost = abs(sum(consumed_moves.stock_valuation_layer_ids.mapped('value')))
+        else:
+            # Si no hay consumed_moves, usar el valor del producto
+            input_cost = main_move.product_qty * main_move.product_id.standard_price
+        
         extra_cost = self.extra_cost * self.qty_producing
         total_cost = input_cost + work_center_cost + extra_cost
         
@@ -103,10 +126,26 @@ class MrpProductionUnbuildAccount(models.Model):
         if not self.is_unbuild_order:
             return
         
-        # Verificar que la suma de cost_share no exceda 100%
+        # Verificar configuración de asignación estricta
+        strict_allocation = self.env['ir.config_parameter'].sudo().get_param(
+            'mrp.unbuild.strict_cost_allocation', False
+        )
+        
+        # Calcular total de cost_share
         total_share = sum(self.unbuild_yield_line_ids.filtered(lambda l: not l.is_waste).mapped('cost_share'))
-        if total_share > 100:
-            raise UserError(_("Total cost share exceeds 100%%. Please check yield configuration."))
+        
+        if strict_allocation and float_compare(total_share, 100, precision_digits=2) != 0:
+            raise UserError(_(
+                "Total cost share must be exactly 100%%. Current total: %s%%"
+            ) % total_share)
+        
+        # Si hay costo no asignado, registrarlo
+        if total_share < 100:
+            unallocated_percentage = 100 - total_share
+            unallocated_cost = total_cost * unallocated_percentage / 100
+            
+            # Crear movimiento contable para pérdida
+            self._create_unbuild_loss_move(unallocated_cost)
         
         # Distribuir costos a cada producto de salida
         for yield_line in self.unbuild_yield_line_ids:
@@ -141,23 +180,101 @@ class MrpProductionUnbuildAccount(models.Model):
                     if self.analytic_distribution:
                         self._create_unbuild_analytic_entry(output_move, allocated_cost)
     
+    def _create_unbuild_loss_move(self, loss_amount):
+        """Crear asiento contable para pérdidas no asignadas"""
+        if float_is_zero(loss_amount, precision_rounding=self.company_id.currency_id.rounding):
+            return
+        
+        # Obtener cuenta de pérdidas configurada
+        ICP = self.env['ir.config_parameter'].sudo()
+        loss_account_id = ICP.get_param(
+            'mrp.unbuild.loss_account_id.%s' % self.company_id.id
+        )
+        
+        if not loss_account_id:
+            # Buscar cuenta de pérdidas por defecto
+            loss_account = self.env['account.account'].search([
+                ('code', '=like', '659%'),
+                ('account_type', '=', 'expense_direct_cost'),
+                ('company_id', '=', self.company_id.id)
+            ], limit=1)
+            
+            if not loss_account:
+                # Usar cuenta de ajuste de inventario como fallback
+                loss_account = self.location_dest_id.valuation_out_account_id
+        else:
+            loss_account = self.env['account.account'].browse(int(loss_account_id))
+        
+        if not loss_account:
+            raise UserError(_(
+                "No loss account configured for unbuild operations. "
+                "Please configure it in Manufacturing settings."
+            ))
+        
+        # Obtener cuenta de inventario
+        stock_input_account = self.product_id.categ_id.property_stock_account_input_categ_id
+        if not stock_input_account:
+            stock_input_account = self.location_dest_id.valuation_in_account_id
+        
+        # Crear asiento contable
+        move_vals = {
+            'journal_id': self.company_id.currency_exchange_journal_id.id or 
+                         self.env['account.journal'].search([
+                             ('type', '=', 'general'),
+                             ('company_id', '=', self.company_id.id)
+                         ], limit=1).id,
+            'date': fields.Date.context_today(self),
+            'ref': _('Unbuild Loss: %s') % self.name,
+            'company_id': self.company_id.id,
+            'line_ids': [
+                (0, 0, {
+                    'name': _('Unbuild Loss: %s') % self.name,
+                    'account_id': loss_account.id,
+                    'debit': loss_amount,
+                    'credit': 0,
+                    'analytic_distribution': self.analytic_distribution,
+                }),
+                (0, 0, {
+                    'name': _('Unbuild Loss: %s') % self.name,
+                    'account_id': stock_input_account.id,
+                    'debit': 0,
+                    'credit': loss_amount,
+                }),
+            ],
+        }
+        
+        account_move = self.env['account.move'].create(move_vals)
+        account_move.action_post()
+        
+        # Mensaje en el chatter
+        self.message_post(
+            body=_("Unallocated cost of %s was posted to loss account %s") % (
+                loss_amount, loss_account.display_name
+            )
+        )
+    
     def _create_unbuild_analytic_entry(self, move, cost):
         """Crear entrada analítica para movimiento de desposte"""
         if not self.analytic_distribution or not cost:
             return
         
         # Crear línea analítica
-        vals = {
+        analytic_line_vals = {
             'name': _('Unbuild: %s - %s') % (self.name, move.product_id.display_name),
             'amount': -cost,  # Negativo porque es un ingreso de producto
-            'account_id': self.analytic_account_id.id,
             'product_id': move.product_id.id,
             'product_uom_id': move.product_uom.id,
             'unit_amount': move.quantity,
             'ref': self.name,
+            'company_id': self.company_id.id,
         }
         
-        self.env['account.analytic.line'].sudo().create(vals)
+        # Distribuir según analytic_distribution
+        for account_id, percentage in self.analytic_distribution.items():
+            vals = dict(analytic_line_vals)
+            vals['account_id'] = int(account_id)
+            vals['amount'] = vals['amount'] * percentage / 100
+            self.env['account.analytic.line'].sudo().create(vals)
     
     def button_mark_done(self):
         """Override para validaciones de costo antes de finalizar"""
@@ -167,13 +284,33 @@ class MrpProductionUnbuildAccount(models.Model):
                 lambda l: not l.is_waste
             ).mapped('cost_share'))
             
-            if float_compare(total_share, 100, precision_digits=2) != 0:
-                # Advertencia, no error estricto
+            if float_compare(total_share, 100, precision_digits=2) < 0:
+                # Advertencia sobre costo no asignado
                 production.message_post(
-                    body=_("Warning: Total cost allocation is %s%%. Unallocated costs will be treated as loss.") % total_share
+                    body=_(
+                        "Warning: Total cost allocation is %s%%. "
+                        "Unallocated costs (%s%%) will be posted to loss account."
+                    ) % (total_share, 100 - total_share)
                 )
         
         return super().button_mark_done()
+    
+    def action_view_unbuild_costs(self):
+        """Acción para ver análisis detallado de costos de desposte"""
+        self.ensure_one()
+        return {
+            'name': _('Unbuild Cost Analysis'),
+            'type': 'ir.actions.act_window',
+            'res_model': 'mrp.production',
+            'view_mode': 'form',
+            'res_id': self.id,
+            'target': 'new',
+            'context': {
+                'form_view_initial_mode': 'readonly',
+                'show_cost_analysis': True,
+            },
+            'views': [(self.env.ref('mrp_unbuild.view_mrp_production_unbuild_cost_analysis').id, 'form')],
+        }
 
 
 class MrpProductionUnbuildYieldAccount(models.Model):

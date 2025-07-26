@@ -14,7 +14,8 @@ class MrpProduction(models.Model):
     is_unbuild_order = fields.Boolean(
         string='Is Unbuild Order',
         compute='_compute_is_unbuild_order',
-        store=True
+        store=True,
+        index=True  # Agregado índice para mejor performance
     )
     
     # Campos específicos para desposte
@@ -56,6 +57,21 @@ class MrpProduction(models.Model):
         store=True
     )
     
+    # Campo para validar disponibilidad
+    has_sufficient_stock = fields.Boolean(
+        string='Has Sufficient Stock',
+        compute='_compute_has_sufficient_stock',
+        help="Indicates if there's enough stock to perform the unbuild"
+    )
+    
+    # Campo para total de costo asignado
+    total_cost_allocation = fields.Float(
+        string='Total Cost Allocation %',
+        compute='_compute_total_cost_allocation',
+        store=True,
+        help="Total percentage of cost allocated to output products"
+    )
+    
     @api.depends('bom_id', 'bom_id.type')
     def _compute_is_unbuild_order(self):
         for production in self:
@@ -85,6 +101,36 @@ class MrpProduction(models.Model):
             else:
                 production.total_waste_qty = 0
     
+    @api.depends('product_id', 'product_qty', 'location_src_id')
+    def _compute_has_sufficient_stock(self):
+        for production in self:
+            if not production.is_unbuild_order or not production.product_id:
+                production.has_sufficient_stock = True
+                continue
+            
+            # Verificar disponibilidad de stock
+            available_qty = production.env['stock.quant']._get_available_quantity(
+                production.product_id,
+                production.location_src_id,
+                lot_id=production.lot_producing_id,
+                strict=True
+            )
+            
+            production.has_sufficient_stock = float_compare(
+                available_qty,
+                production.product_qty,
+                precision_rounding=production.product_uom_id.rounding
+            ) >= 0
+    
+    @api.depends('unbuild_yield_line_ids.cost_share', 'unbuild_yield_line_ids.is_waste')
+    def _compute_total_cost_allocation(self):
+        for production in self:
+            if production.is_unbuild_order:
+                non_waste_lines = production.unbuild_yield_line_ids.filtered(lambda l: not l.is_waste)
+                production.total_cost_allocation = sum(non_waste_lines.mapped('cost_share'))
+            else:
+                production.total_cost_allocation = 0
+    
     @api.onchange('bom_id')
     def _onchange_bom_id_unbuild(self):
         """Populate yield lines when selecting an unbuild BoM"""
@@ -99,6 +145,17 @@ class MrpProduction(models.Model):
                     'is_waste': yield_data.is_waste,
                 }))
             self.unbuild_yield_line_ids = yield_lines
+    
+    @api.onchange('product_qty')
+    def _onchange_product_qty_unbuild(self):
+        """Update expected quantities when changing the quantity to unbuild"""
+        if self.is_unbuild_order and self.bom_id and self.unbuild_yield_line_ids:
+            for line in self.unbuild_yield_line_ids:
+                bom_yield = self.bom_id.unbuild_yield_ids.filtered(
+                    lambda y: y.product_id == line.product_id
+                )
+                if bom_yield:
+                    line.expected_qty = bom_yield.expected_qty * self.product_qty
     
     def _get_moves_raw_values(self):
         """Override para manejar desposte - en desposte no hay materias primas"""
@@ -161,6 +218,7 @@ class MrpProduction(models.Model):
             'date_deadline': self.date_start,
             'propagate_cancel': self.propagate_cancel,
             'picking_type_id': self.picking_type_id.id,
+            'is_unbuild_move': True,
         }
     
     def action_confirm(self):
@@ -171,6 +229,32 @@ class MrpProduction(models.Model):
                 raise UserError(_("Please select an Unbuild BoM before confirming."))
             if order.product_qty <= 0:
                 raise UserError(_("The quantity to unbuild must be positive."))
+            
+            # Validar disponibilidad de stock
+            if not order.has_sufficient_stock:
+                raise UserError(_(
+                    "Insufficient stock for product %s.\n"
+                    "Required: %s %s\n"
+                    "Available: %s %s"
+                ) % (
+                    order.product_id.display_name,
+                    order.product_qty,
+                    order.product_uom_id.name,
+                    order.env['stock.quant']._get_available_quantity(
+                        order.product_id,
+                        order.location_src_id,
+                        lot_id=order.lot_producing_id,
+                        strict=True
+                    ),
+                    order.product_uom_id.name
+                ))
+            
+            # Validar asignación de costos si está configurado
+            if self.env['ir.config_parameter'].sudo().get_param('mrp.unbuild.strict_cost_allocation'):
+                if float_compare(order.total_cost_allocation, 100, precision_digits=2) != 0:
+                    raise UserError(_(
+                        "Cost allocation must be exactly 100%%. Current allocation: %s%%"
+                    ) % order.total_cost_allocation)
         
         return super().action_confirm()
     
@@ -186,7 +270,13 @@ class MrpProduction(models.Model):
         if not main_move:
             return True
         
-        total_cost = abs(main_move.stock_valuation_layer_ids.value) if main_move.stock_valuation_layer_ids else 0
+        total_cost = abs(sum(main_move.stock_valuation_layer_ids.mapped('value'))) if main_move.stock_valuation_layer_ids else 0
+        
+        # Calcular costo no asignado
+        unallocated_percentage = 100 - self.total_cost_allocation
+        if unallocated_percentage > 0:
+            # Registrar costo no asignado en cuenta de pérdidas
+            self._create_unbuild_loss_entry(total_cost * unallocated_percentage / 100)
         
         # Distribuir costo según cost_share definido
         for yield_line in self.unbuild_yield_line_ids.filtered(lambda l: not l.is_waste):
@@ -198,9 +288,34 @@ class MrpProduction(models.Model):
             )
             if output_move and output_move.product_id.cost_method in ('fifo', 'average'):
                 allocated_cost = total_cost * yield_line.cost_share / 100
-                output_move.price_unit = allocated_cost / output_move.product_qty
+                output_move.price_unit = allocated_cost / output_move.product_qty if output_move.product_qty else 0
         
         return True
+    
+    def _create_unbuild_loss_entry(self, loss_amount):
+        """Crear asiento contable para pérdidas no asignadas"""
+        if float_is_zero(loss_amount, precision_rounding=self.company_id.currency_id.rounding):
+            return
+        
+        # Obtener cuenta de pérdidas
+        loss_account_id = self.env['ir.config_parameter'].sudo().get_param(
+            'mrp.unbuild.loss_account_id.%s' % self.company_id.id
+        )
+        if not loss_account_id:
+            # Si no hay cuenta configurada, usar cuenta de ajuste de inventario
+            loss_account = self.location_dest_id.valuation_out_account_id
+        else:
+            loss_account = self.env['account.account'].browse(int(loss_account_id))
+        
+        # Crear línea analítica si aplica
+        if self.analytic_distribution and loss_account:
+            self.env['account.analytic.line'].create({
+                'name': _('Unbuild Loss: %s') % self.name,
+                'amount': loss_amount,
+                'account_id': self.analytic_account_id.id,
+                'ref': self.name,
+                'company_id': self.company_id.id,
+            })
     
     def button_mark_done(self):
         """Override para capturar rendimientos reales antes de procesar"""
@@ -209,21 +324,43 @@ class MrpProduction(models.Model):
             if not production.unbuild_yield_line_ids:
                 raise UserError(_("Please capture actual yields before marking as done."))
             
-            # Actualizar cantidades en movimientos según rendimientos reales
+            # Validar tolerancia de rendimientos si está configurado
+            tolerance = float(self.env['ir.config_parameter'].sudo().get_param(
+                'mrp.unbuild.yield_tolerance', default='5.0'
+            ))
+            
             for yield_line in production.unbuild_yield_line_ids:
+                if yield_line.expected_qty > 0 and abs(yield_line.variance_percent) > tolerance:
+                    # Solo advertencia, no error
+                    production.message_post(
+                        body=_(
+                            "Yield variance for %s exceeds tolerance: %.2f%% (tolerance: %.2f%%)"
+                        ) % (yield_line.product_id.display_name, yield_line.variance_percent, tolerance)
+                    )
+                
+                # Actualizar cantidades en movimientos según rendimientos reales
                 move = production.move_finished_ids.filtered(
                     lambda m: m.product_id == yield_line.product_id and m.product_id != production.product_id
                 )
-                if move:
+                if move and move.state not in ('done', 'cancel'):
                     move.product_uom_qty = yield_line.actual_qty
         
         return super().button_mark_done()
+    
+    def action_view_stock_valuation_layers(self):
+        """Extender para mostrar valoración específica de desposte"""
+        action = super().action_view_stock_valuation_layers()
+        if self.is_unbuild_order:
+            action['name'] = _('Unbuild Order Valuation')
+            # Agregar contexto para identificar vista de desposte
+            action['context'] = dict(action.get('context', {}), unbuild_mode=True)
+        return action
     
     @api.model
     def _get_name_backorder(self, name, sequence):
         if self.is_unbuild_order:
             # Usar prefijo diferente para backorders de desposte
-            name = name.replace('MO', 'UO')
+            return name.replace('UO', 'UO-BACK') + '-%d' % sequence
         return super()._get_name_backorder(name, sequence)
 
 
@@ -292,6 +429,12 @@ class MrpProductionUnbuildYield(models.Model):
         readonly=True
     )
     
+    state = fields.Selection(
+        related='production_id.state',
+        string='State',
+        readonly=True
+    )
+    
     @api.depends('expected_qty', 'actual_qty')
     def _compute_variance(self):
         for line in self:
@@ -300,3 +443,15 @@ class MrpProductionUnbuildYield(models.Model):
                 line.variance_percent = (line.variance / line.expected_qty) * 100
             else:
                 line.variance_percent = 0
+    
+    @api.constrains('actual_qty')
+    def _check_actual_qty(self):
+        for line in self:
+            if line.actual_qty < 0:
+                raise ValidationError(_("Actual quantity cannot be negative."))
+    
+    def action_apply_expected(self):
+        """Acción para aplicar cantidades esperadas como reales"""
+        for line in self:
+            if line.state not in ('done', 'cancel'):
+                line.actual_qty = line.expected_qty

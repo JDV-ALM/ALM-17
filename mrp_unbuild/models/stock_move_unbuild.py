@@ -3,6 +3,7 @@
 
 from odoo import api, fields, models, _
 from odoo.tools import float_compare, float_is_zero
+from odoo.exceptions import UserError, ValidationError
 
 
 class StockMove(models.Model):
@@ -12,6 +13,7 @@ class StockMove(models.Model):
     is_unbuild_move = fields.Boolean(
         string='Is Unbuild Move',
         default=False,
+        index=True,  # Agregado índice para mejor performance
         help="Indicates if this move is part of an unbuild operation"
     )
     
@@ -19,6 +21,7 @@ class StockMove(models.Model):
     unbuild_yield_line_id = fields.Many2one(
         'mrp.production.unbuild.yield',
         string='Unbuild Yield Line',
+        index=True,  # Agregado índice
         help="Related yield line in unbuild order"
     )
     
@@ -45,6 +48,15 @@ class StockMove(models.Model):
         unbuild_moves = self.filtered('is_unbuild_move')
         other_moves = self - unbuild_moves
         
+        # Validar movimientos de desposte antes de procesar
+        for move in unbuild_moves:
+            if move.production_id and move.production_id.is_unbuild_order:
+                # Validar que el movimiento principal tenga cantidad
+                if move.product_id == move.production_id.product_id and move.quantity <= 0:
+                    raise UserError(_(
+                        "Cannot process unbuild order without input quantity for %s"
+                    ) % move.product_id.display_name)
+        
         # Procesar movimientos de desposte
         for move in unbuild_moves:
             if move.production_id and move.production_id.is_unbuild_order:
@@ -63,6 +75,14 @@ class StockMove(models.Model):
             if move.production_id and move.production_id.is_unbuild_order:
                 # Validar que los movimientos de salida no excedan la entrada
                 self._validate_unbuild_quantities(move.production_id)
+                
+                # Actualizar el campo unbuild_yield_line_id si no está establecido
+                if not move.unbuild_yield_line_id:
+                    yield_line = move.production_id.unbuild_yield_line_ids.filtered(
+                        lambda l: l.product_id == move.product_id
+                    )
+                    if yield_line:
+                        move.unbuild_yield_line_id = yield_line
         
         return res
     
@@ -73,7 +93,7 @@ class StockMove(models.Model):
         
         # Obtener movimiento de entrada (producto principal)
         input_move = production.move_finished_ids.filtered(
-            lambda m: m.product_id == production.product_id
+            lambda m: m.product_id == production.product_id and m.state == 'done'
         )
         if not input_move:
             return
@@ -82,23 +102,43 @@ class StockMove(models.Model):
             input_move.quantity, production.product_id.uom_id
         )
         
-        # Calcular total de salidas
+        # Calcular total de salidas por categoría de peso
         output_moves = production.move_finished_ids.filtered(
             lambda m: m.product_id != production.product_id and m.state == 'done'
         )
         
-        total_output_weight = 0
+        # Agrupar por categoría de UoM para validación coherente
+        uom_categories = {}
         for move in output_moves:
-            # Convertir a unidad base del producto para comparación
+            category = move.product_uom_id.category_id
+            if category not in uom_categories:
+                uom_categories[category] = 0
+            
+            # Convertir a unidad base de la categoría
             qty = move.product_uom._compute_quantity(
-                move.quantity, move.product_id.uom_id
+                move.quantity, category.uom_ids.filtered('is_base_uom')[0]
             )
-            total_output_weight += qty
+            uom_categories[category] += qty
         
-        # Validación opcional: verificar que no se exceda el peso de entrada
-        # (comentado por defecto, activar según necesidad del negocio)
-        # if float_compare(total_output_weight, input_qty, precision_rounding=0.01) > 0:
-        #     raise UserError(_("Output quantities exceed input quantity!"))
+        # Validar solo si la entrada y salidas son de la misma categoría (ej: peso)
+        input_category = production.product_uom_id.category_id
+        if input_category in uom_categories:
+            output_qty = uom_categories[input_category]
+            
+            # Permitir una tolerancia del 1% para redondeos
+            tolerance = 0.01
+            if float_compare(output_qty, input_qty * (1 + tolerance), 
+                           precision_rounding=0.001) > 0:
+                raise UserError(_(
+                    "Output quantities exceed input quantity!\n"
+                    "Input: %s %s\n"
+                    "Output: %s %s"
+                ) % (
+                    input_qty,
+                    input_category.name,
+                    output_qty,
+                    input_category.name
+                ))
     
     @api.model
     def _prepare_merge_moves_distinct_fields(self):
@@ -121,6 +161,30 @@ class StockMove(models.Model):
                 lot = self.production_id.lot_producing_id
         
         return super()._generate_consumed_move_line(qty_to_add, final_lot, lot=lot)
+    
+    def _compute_reserved_availability(self):
+        """Override para manejar disponibilidad en movimientos de desposte"""
+        unbuild_moves = self.filtered(lambda m: m.is_unbuild_move and m.production_id)
+        other_moves = self - unbuild_moves
+        
+        # Para movimientos de desposte del producto principal, verificar disponibilidad especial
+        for move in unbuild_moves:
+            if move.product_id == move.production_id.product_id:
+                # El producto principal siempre debe estar disponible si existe el stock
+                available_qty = self.env['stock.quant']._get_available_quantity(
+                    move.product_id,
+                    move.location_id,
+                    lot_id=move.production_id.lot_producing_id,
+                    strict=False
+                )
+                move.reserved_availability = min(move.product_uom_qty, available_qty)
+            else:
+                # Para productos de salida, no hay reserva
+                move.reserved_availability = 0
+        
+        # Procesar otros movimientos normalmente
+        if other_moves:
+            super(StockMove, other_moves)._compute_reserved_availability()
 
 
 class StockMoveLine(models.Model):
@@ -131,13 +195,15 @@ class StockMoveLine(models.Model):
         related='move_id.production_id',
         string='Unbuild Order',
         store=True,
+        index=True,  # Agregado índice
         readonly=True
     )
     
     is_unbuild_line = fields.Boolean(
         related='move_id.is_unbuild_move',
         string='Is Unbuild Line',
-        store=True
+        store=True,
+        index=True  # Agregado índice
     )
     
     def _get_aggregated_product_quantities(self, **kwargs):
@@ -165,6 +231,20 @@ class StockMoveLine(models.Model):
                     vals['lot_id'] = production.lot_producing_id.id
         
         return super().create(vals_list)
+    
+    @api.constrains('lot_id', 'move_id')
+    def _check_unbuild_lot_consistency(self):
+        """Validar consistencia de lotes en desposte"""
+        for line in self:
+            if line.is_unbuild_line and line.move_id.production_id:
+                production = line.move_id.production_id
+                # Para el producto principal, el lote debe coincidir
+                if (line.product_id == production.product_id and 
+                    production.lot_producing_id and 
+                    line.lot_id != production.lot_producing_id):
+                    raise ValidationError(_(
+                        "The lot for the main product must match the unbuild order lot."
+                    ))
 
 
 class StockPicking(models.Model):
@@ -174,7 +254,8 @@ class StockPicking(models.Model):
     is_unbuild_picking = fields.Boolean(
         string='Is Unbuild Picking',
         compute='_compute_is_unbuild_picking',
-        store=True
+        store=True,
+        index=True  # Agregado índice
     )
     
     @api.depends('move_ids.is_unbuild_move')
@@ -189,9 +270,16 @@ class StockPicking(models.Model):
         for picking in unbuild_pickings:
             # Validar que se hayan capturado todas las cantidades
             for move in picking.move_ids.filtered('is_unbuild_move'):
-                if move.state not in ('done', 'cancel') and float_is_zero(move.quantity, precision_rounding=move.product_uom.rounding):
-                    # Advertencia suave, no error
-                    move.quantity = move.product_uom_qty
+                if move.state not in ('done', 'cancel') and float_is_zero(
+                    move.quantity, precision_rounding=move.product_uom.rounding
+                ):
+                    # Para productos de salida, permitir cantidad 0 (desperdicio total)
+                    if move.product_id != move.production_id.product_id:
+                        continue
+                    # Para el producto principal, es obligatorio
+                    raise UserError(_(
+                        "Input product quantity is required for unbuild order %s"
+                    ) % move.production_id.name)
         
         return super().button_validate()
 
@@ -203,8 +291,28 @@ class StockQuant(models.Model):
         """Override para priorizar quants en órdenes de desposte"""
         quants = super()._gather(product_id, location_id, lot_id, package_id, owner_id, strict)
         
-        # Si estamos en contexto de desposte, ordenar por fecha más antigua primero (FIFO)
+        # Si estamos en contexto de desposte, aplicar orden especial
         if self.env.context.get('unbuild_mode'):
-            quants = quants.sorted('in_date')
+            # Para desposte, priorizar:
+            # 1. Lotes más antiguos (FIFO)
+            # 2. Cantidades más grandes (para minimizar parciales)
+            quants = quants.sorted(lambda q: (q.in_date or fields.Datetime.now(), -q.quantity))
         
         return quants
+    
+    @api.model
+    def _update_reserved_quantity(self, product_id, location_id, quantity, lot_id=None, 
+                                 package_id=None, owner_id=None, strict=False):
+        """Override para manejar reservas en contexto de desposte"""
+        # Si estamos en contexto de desposte, aplicar lógica especial
+        if self.env.context.get('unbuild_mode') and lot_id:
+            # Para desposte con lote específico, forzar uso de ese lote
+            return super()._update_reserved_quantity(
+                product_id, location_id, quantity, lot_id=lot_id,
+                package_id=package_id, owner_id=owner_id, strict=True
+            )
+        
+        return super()._update_reserved_quantity(
+            product_id, location_id, quantity, lot_id=lot_id,
+            package_id=package_id, owner_id=owner_id, strict=strict
+        )

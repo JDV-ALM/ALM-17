@@ -79,7 +79,7 @@
         <!-- PARÁMETROS DE CONFIGURACIÓN -->
         <!-- ============================================ -->
         
-        <!-- Parámetro para control de rendimientos -->
+        <!-- Parámetro para control de rendimientos (obsoleto - usar grupo) -->
         <record id="config_parameter_unbuild_strict_yields" model="ir.config_parameter">
             <field name="key">mrp.unbuild.strict_yields</field>
             <field name="value">False</field>
@@ -89,6 +89,18 @@
         <record id="config_parameter_unbuild_allow_backorder" model="ir.config_parameter">
             <field name="key">mrp.unbuild.allow_backorder</field>
             <field name="value">True</field>
+        </record>
+        
+        <!-- Parámetro para tolerancia de rendimiento -->
+        <record id="config_parameter_unbuild_yield_tolerance" model="ir.config_parameter">
+            <field name="key">mrp.unbuild.yield_tolerance</field>
+            <field name="value">5.0</field>
+        </record>
+        
+        <!-- Parámetro para asignación estricta de costos -->
+        <record id="config_parameter_unbuild_strict_cost_allocation" model="ir.config_parameter">
+            <field name="key">mrp.unbuild.strict_cost_allocation</field>
+            <field name="value">False</field>
         </record>
     </data>
     
@@ -115,6 +127,12 @@
                                 <div class="text-muted">
                                     Enforce strict yield validation in unbuild orders
                                 </div>
+                                <div class="content-group" invisible="not group_unbuild_strict_yields">
+                                    <div class="mt16">
+                                        <label for="unbuild_yield_tolerance" class="o_light_label"/>
+                                        <field name="unbuild_yield_tolerance" class="oe_inline"/> %
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         <div class="col-12 col-lg-6 o_setting_box">
@@ -128,9 +146,42 @@
                                 </div>
                             </div>
                         </div>
+                        <div class="col-12 col-lg-6 o_setting_box">
+                            <div class="o_setting_left_pane">
+                                <field name="unbuild_strict_cost_allocation"/>
+                            </div>
+                            <div class="o_setting_right_pane">
+                                <label for="unbuild_strict_cost_allocation"/>
+                                <div class="text-muted">
+                                    Require 100% cost allocation before completing unbuild orders
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12 col-lg-6 o_setting_box">
+                            <div class="o_setting_left_pane">
+                                <field name="unbuild_loss_account_id" invisible="not unbuild_strict_cost_allocation"/>
+                            </div>
+                            <div class="o_setting_right_pane" invisible="not unbuild_strict_cost_allocation">
+                                <label for="unbuild_loss_account_id"/>
+                                <div class="text-muted">
+                                    Account for posting unallocated costs in unbuild operations
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </xpath>
             </field>
+        </record>
+        
+        <!-- ============================================ -->
+        <!-- GRUPOS DE PERMISOS ADICIONALES -->
+        <!-- ============================================ -->
+        
+        <!-- Grupo para control estricto de rendimientos -->
+        <record id="group_unbuild_strict_yields" model="res.groups">
+            <field name="name">Strict Unbuild Yield Control</field>
+            <field name="category_id" ref="base.module_category_hidden"/>
+            <field name="comment">Enable strict validation of actual vs expected yields</field>
         </record>
     </data>
 </odoo>
