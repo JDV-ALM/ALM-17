@@ -41,6 +41,7 @@ experience for users who need both manufacturing and unbuild capabilities.
         
         # Views
         'views/mrp_unbuild_views.xml',
+        'views/res_config_settings_views.xml',
     ],
     'installable': True,
     'application': False,

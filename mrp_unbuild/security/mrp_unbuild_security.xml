@@ -1,6 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
     <!-- ============================================ -->
+    <!-- CATEGORÍAS DE ACCESO -->
+    <!-- ============================================ -->
+    
+    <!-- Categoría para permisos de desposte -->
+    <record id="module_category_mrp_unbuild" model="ir.module.category">
+        <field name="name">Manufacturing - Unbuild</field>
+        <field name="description">Manage unbuild/disassembly operations</field>
+        <field name="parent_id" ref="base.module_category_manufacturing_manufacturing"/>
+        <field name="sequence">15</field>
+    </record>
+    
+    <!-- ============================================ -->
     <!-- GRUPOS DE SEGURIDAD -->
     <!-- ============================================ -->
     
@@ -18,6 +30,13 @@
         <field name="category_id" ref="base.module_category_manufacturing_manufacturing"/>
         <field name="implied_ids" eval="[(4, ref('group_mrp_unbuild_user')), (4, ref('mrp.group_mrp_manager'))]"/>
         <field name="comment">Full access to unbuild configuration and analysis</field>
+    </record>
+    
+    <!-- Grupo para control estricto de rendimientos -->
+    <record id="group_unbuild_strict_yields" model="res.groups">
+        <field name="name">Strict Unbuild Yield Control</field>
+        <field name="category_id" ref="base.module_category_hidden"/>
+        <field name="comment">Enable strict validation of actual vs expected yields</field>
     </record>
     
     <!-- ============================================ -->
@@ -58,17 +77,5 @@
                 ('production_id', '=', False),
                 ('production_id.company_id', 'in', company_ids)
         ]</field>
-    </record>
-    
-    <!-- ============================================ -->
-    <!-- CATEGORÍAS DE ACCESO -->
-    <!-- ============================================ -->
-    
-    <!-- Categoría para permisos de desposte -->
-    <record id="module_category_mrp_unbuild" model="ir.module.category">
-        <field name="name">Manufacturing - Unbuild</field>
-        <field name="description">Manage unbuild/disassembly operations</field>
-        <field name="parent_id" ref="base.module_category_manufacturing_manufacturing"/>
-        <field name="sequence">15</field>
     </record>
 </odoo>
