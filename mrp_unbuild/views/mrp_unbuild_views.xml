@@ -1,0 +1,287 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- ============================================ -->
+    <!-- VISTAS PARA MRP.BOM (Lista de Desposte) -->
+    <!-- ============================================ -->
+    
+    <!-- Vista Form de BoM - Heredar y agregar campos de desposte -->
+    <record id="mrp_bom_form_view_unbuild" model="ir.ui.view">
+        <field name="name">mrp.bom.form.unbuild</field>
+        <field name="model">mrp.bom</field>
+        <field name="inherit_id" ref="mrp.mrp_bom_form_view"/>
+        <field name="arch" type="xml">
+            <!-- Agregar campo is_unbuild invisible para condicionales -->
+            <field name="type" position="after">
+                <field name="is_unbuild" invisible="1"/>
+            </field>
+            
+            <!-- Cambiar label de Components cuando es unbuild -->
+            <xpath expr="//page[@name='components']" position="attributes">
+                <attribute name="string" invisible="not is_unbuild">Output Products</attribute>
+            </xpath>
+            
+            <!-- Ocultar tab de Operations para unbuild -->
+            <xpath expr="//page[@name='operations']" position="attributes">
+                <attribute name="invisible">is_unbuild</attribute>
+            </xpath>
+            
+            <!-- Ocultar tab de By-products para unbuild -->
+            <xpath expr="//page[@name='by_products']" position="attributes">
+                <attribute name="invisible">is_unbuild</attribute>
+            </xpath>
+            
+            <!-- Agregar nuevo tab para Yields esperados en unbuild -->
+            <xpath expr="//notebook" position="inside">
+                <page string="Expected Yields" name="unbuild_yields" invisible="not is_unbuild">
+                    <field name="unbuild_yield_ids">
+                        <tree editable="bottom">
+                            <field name="sequence" widget="handle"/>
+                            <field name="product_id" domain="[('type', 'in', ['product', 'consu'])]"/>
+                            <field name="expected_qty"/>
+                            <field name="product_uom_id" groups="uom.group_uom"/>
+                            <field name="cost_share" sum="Total"/>
+                            <field name="is_waste"/>
+                        </tree>
+                        <form>
+                            <group>
+                                <group>
+                                    <field name="product_id"/>
+                                    <field name="expected_qty"/>
+                                    <field name="product_uom_id" groups="uom.group_uom"/>
+                                </group>
+                                <group>
+                                    <field name="cost_share"/>
+                                    <field name="is_waste"/>
+                                </group>
+                            </group>
+                        </form>
+                    </field>
+                    <group class="oe_subtotal_footer">
+                        <div class="oe_subtotal_footer_separator" invisible="1">
+                            <label for="id" string="Cost Share Total"/>
+                            <span>The total cost share is calculated from the lines</span>
+                        </div>
+                    </group>
+                </page>
+            </xpath>
+            
+            <!-- Modificar el campo product_qty label según tipo -->
+            <xpath expr="//label[@for='product_qty']" position="attributes">
+                <attribute name="string" invisible="not is_unbuild">Input Quantity</attribute>
+            </xpath>
+        </field>
+    </record>
+    
+    <!-- Vista Tree de BoM - Agregar columna tipo -->
+    <record id="mrp_bom_tree_view_unbuild" model="ir.ui.view">
+        <field name="name">mrp.bom.tree.unbuild</field>
+        <field name="model">mrp.bom</field>
+        <field name="inherit_id" ref="mrp.mrp_bom_tree_view"/>
+        <field name="arch" type="xml">
+            <field name="product_tmpl_id" position="after">
+                <field name="type" decoration-info="type == 'unbuild'"/>
+            </field>
+        </field>
+    </record>
+    
+    <!-- ============================================ -->
+    <!-- VISTAS PARA MRP.PRODUCTION (Órdenes Desposte) -->
+    <!-- ============================================ -->
+    
+    <!-- Vista Form de Production - Adaptar para desposte -->
+    <record id="mrp_production_form_view_unbuild" model="ir.ui.view">
+        <field name="name">mrp.production.form.unbuild</field>
+        <field name="model">mrp.production</field>
+        <field name="inherit_id" ref="mrp.mrp_production_form_view"/>
+        <field name="arch" type="xml">
+            <!-- Agregar campo is_unbuild_order invisible -->
+            <field name="state" position="after">
+                <field name="is_unbuild_order" invisible="1"/>
+            </field>
+            
+            <!-- Cambiar título del form según tipo -->
+            <xpath expr="//form" position="attributes">
+                <attribute name="string" invisible="not is_unbuild_order">Unbuild Orders</attribute>
+            </xpath>
+            
+            <!-- Cambiar label de referencia -->
+            <xpath expr="//label[@for='name']" position="attributes">
+                <attribute name="string" invisible="not is_unbuild_order">UO Reference</attribute>
+            </xpath>
+            
+            <!-- Modificar placeholder del name -->
+            <xpath expr="//field[@name='name']" position="attributes">
+                <attribute name="placeholder" invisible="not is_unbuild_order">Unbuild Reference</attribute>
+            </xpath>
+            
+            <!-- Cambiar label de cantidad -->
+            <xpath expr="//label[@for='product_qty']" position="attributes">
+                <attribute name="string" invisible="not is_unbuild_order">Quantity to Unbuild</attribute>
+            </xpath>
+            
+            <!-- Cambiar string de To Produce -->
+            <xpath expr="//span[contains(text(), 'To Produce')]" position="attributes">
+                <attribute name="invisible">is_unbuild_order</attribute>
+            </xpath>
+            <xpath expr="//span[contains(text(), 'To Produce')]" position="after">
+                <span class='fw-bold text-nowrap' invisible="not is_unbuild_order">To Unbuild</span>
+            </xpath>
+            
+            <!-- Ocultar tab Components para unbuild -->
+            <xpath expr="//page[@name='components']" position="attributes">
+                <attribute name="invisible">is_unbuild_order</attribute>
+            </xpath>
+            
+            <!-- Ocultar tab Work Orders para unbuild -->
+            <xpath expr="//page[@name='operations']" position="attributes">
+                <attribute name="invisible">is_unbuild_order</attribute>
+            </xpath>
+            
+            <!-- Cambiar título de By-Products a Output Products -->
+            <xpath expr="//page[@name='finished_products']" position="attributes">
+                <attribute name="string" invisible="not is_unbuild_order">Output Products</attribute>
+                <attribute name="invisible">not is_unbuild_order</attribute>
+            </xpath>
+            
+            <!-- Agregar tab de Yields para captura de rendimientos -->
+            <xpath expr="//notebook" position="inside">
+                <page string="Actual Yields" name="unbuild_yields" invisible="not is_unbuild_order" groups="mrp.group_mrp_byproducts">
+                    <group invisible="state in ['draft', 'cancel']">
+                        <group>
+                            <field name="unbuild_efficiency" widget="progressbar"/>
+                            <field name="total_waste_qty"/>
+                        </group>
+                    </group>
+                    <field name="unbuild_yield_line_ids" invisible="state == 'draft'">
+                        <tree editable="bottom" decoration-success="variance_percent &gt;= 0" decoration-danger="variance_percent &lt; -10">
+                            <field name="sequence" widget="handle"/>
+                            <field name="product_id" readonly="1"/>
+                            <field name="expected_qty" readonly="1"/>
+                            <field name="actual_qty" readonly="state == 'done'"/>
+                            <field name="product_uom_id" readonly="1" groups="uom.group_uom"/>
+                            <field name="variance"/>
+                            <field name="variance_percent" widget="percentage"/>
+                            <field name="cost_share" readonly="1"/>
+                            <field name="is_waste" readonly="1"/>
+                            <field name="production_id" invisible="1"/>
+                            <field name="state" invisible="1"/>
+                        </tree>
+                    </field>
+                </page>
+            </xpath>
+            
+            <!-- Modificar dominio del bom_id según tipo -->
+            <xpath expr="//field[@name='bom_id']" position="attributes">
+                <attribute name="domain" invisible="not is_unbuild_order">[
+                    '&amp;',
+                        '|',
+                            ('company_id', '=', False),
+                            ('company_id', '=', company_id),
+                        '&amp;',
+                            '|',
+                                ('product_id','=',product_id),
+                                '&amp;',
+                                    ('product_tmpl_id.product_variant_ids','=',product_id),
+                                    ('product_id','=',False),
+                    ('type', '=', 'unbuild')]</attribute>
+            </xpath>
+        </field>
+    </record>
+    
+    <!-- Vista Tree de Production para órdenes de desposte -->
+    <record id="mrp_production_tree_view_unbuild" model="ir.ui.view">
+        <field name="name">mrp.production.tree.unbuild</field>
+        <field name="model">mrp.production</field>
+        <field name="inherit_id" ref="mrp.mrp_production_tree_view"/>
+        <field name="arch" type="xml">
+            <!-- Agregar columna para identificar tipo -->
+            <field name="product_id" position="after">
+                <field name="is_unbuild_order" optional="hide"/>
+            </field>
+        </field>
+    </record>
+    
+    <!-- Vista Search para filtrar órdenes de desposte -->
+    <record id="view_mrp_production_filter_unbuild" model="ir.ui.view">
+        <field name="name">mrp.production.select.unbuild</field>
+        <field name="model">mrp.production</field>
+        <field name="inherit_id" ref="mrp.view_mrp_production_filter"/>
+        <field name="arch" type="xml">
+            <xpath expr="//search" position="inside">
+                <separator/>
+                <filter string="Manufacturing Orders" name="manufacturing_orders" domain="[('is_unbuild_order', '=', False)]"/>
+                <filter string="Unbuild Orders" name="unbuild_orders" domain="[('is_unbuild_order', '=', True)]"/>
+            </xpath>
+        </field>
+    </record>
+    
+    <!-- ============================================ -->
+    <!-- ACCIONES Y MENÚS -->
+    <!-- ============================================ -->
+    
+    <!-- Acción para BoMs de tipo Unbuild -->
+    <record id="mrp_bom_unbuild_action" model="ir.actions.act_window">
+        <field name="name">Unbuild BoMs</field>
+        <field name="res_model">mrp.bom</field>
+        <field name="view_mode">tree,form</field>
+        <field name="domain">[('type', '=', 'unbuild')]</field>
+        <field name="context">{'default_type': 'unbuild'}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Create an Unbuild Bill of Materials
+            </p>
+            <p>
+                Unbuild BoMs define how to disassemble a product into multiple output products,
+                specifying expected yields and cost distribution.
+            </p>
+        </field>
+    </record>
+    
+    <!-- Acción para Órdenes de Desposte -->
+    <record id="mrp_production_unbuild_action" model="ir.actions.act_window">
+        <field name="name">Unbuild Orders</field>
+        <field name="res_model">mrp.production</field>
+        <field name="view_mode">tree,kanban,form,calendar,pivot,graph,activity</field>
+        <field name="search_view_id" ref="mrp.view_mrp_production_filter"/>
+        <field name="context">{
+            'search_default_unbuild_orders': 1,
+            'default_is_unbuild_order': True,
+            'unbuild_mode': True
+        }</field>
+        <field name="domain">[('is_unbuild_order', '=', True)]</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Create an Unbuild Order
+            </p>
+            <p>
+                Unbuild Orders allow you to disassemble finished products into their components,
+                tracking actual yields and managing cost distribution.
+            </p>
+        </field>
+    </record>
+    
+    <!-- Menús -->
+    <menuitem id="menu_mrp_unbuild_root"
+        name="Unbuild"
+        parent="mrp.menu_mrp_root"
+        sequence="15"
+        groups="mrp.group_mrp_user"/>
+    
+    <menuitem id="menu_mrp_unbuild_orders"
+        name="Unbuild Orders"
+        action="mrp_production_unbuild_action"
+        parent="menu_mrp_unbuild_root"
+        sequence="10"/>
+    
+    <menuitem id="menu_mrp_unbuild_bom"
+        name="Unbuild BoMs"
+        action="mrp_bom_unbuild_action"
+        parent="mrp.menu_mrp_configuration"
+        sequence="25"/>
+    
+    <menuitem id="menu_mrp_unbuild_analysis"
+        name="Unbuild Analysis"
+        parent="mrp.menu_mrp_reporting"
+        sequence="30"
+        groups="mrp.group_mrp_manager"/>
+</odoo>

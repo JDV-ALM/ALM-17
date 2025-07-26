@@ -1,0 +1,11 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_mrp_bom_unbuild_yield_user,mrp.bom.unbuild.yield user,model_mrp_bom_unbuild_yield,group_mrp_unbuild_user,1,0,0,0
+access_mrp_bom_unbuild_yield_manager,mrp.bom.unbuild.yield manager,model_mrp_bom_unbuild_yield,group_mrp_unbuild_manager,1,1,1,1
+access_mrp_production_unbuild_yield_user,mrp.production.unbuild.yield user,model_mrp_production_unbuild_yield,group_mrp_unbuild_user,1,1,1,0
+access_mrp_production_unbuild_yield_manager,mrp.production.unbuild.yield manager,model_mrp_production_unbuild_yield,group_mrp_unbuild_manager,1,1,1,1
+access_mrp_bom_unbuild_user,mrp.bom unbuild user,mrp.model_mrp_bom,group_mrp_unbuild_user,1,0,0,0
+access_mrp_bom_unbuild_manager,mrp.bom unbuild manager,mrp.model_mrp_bom,group_mrp_unbuild_manager,1,1,1,1
+access_mrp_production_unbuild_user,mrp.production unbuild user,mrp.model_mrp_production,group_mrp_unbuild_user,1,1,1,0
+access_mrp_production_unbuild_manager,mrp.production unbuild manager,mrp.model_mrp_production,group_mrp_unbuild_manager,1,1,1,1
+access_stock_move_unbuild_user,stock.move unbuild user,stock.model_stock_move,group_mrp_unbuild_user,1,1,1,0
+access_stock_move_line_unbuild_user,stock.move.line unbuild user,stock.model_stock_move_line,group_mrp_unbuild_user,1,1,1,0
