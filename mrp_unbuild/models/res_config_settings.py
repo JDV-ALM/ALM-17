@@ -10,7 +10,7 @@ class ResConfigSettings(models.TransientModel):
     # Grupo para control estricto de rendimientos
     group_unbuild_strict_yields = fields.Boolean(
         string="Strict Yield Control",
-        group='mrp_unbuild.group_mrp_unbuild_manager',  # Corregido: usar 'group' en lugar de 'implied_group'
+        implied_group='mrp_unbuild.group_unbuild_strict_yields',  # Corregido: usar 'implied_group'
         help="Enforce that actual yields match expected yields within tolerance"
     )
     
@@ -42,7 +42,31 @@ class ResConfigSettings(models.TransientModel):
     unbuild_loss_account_id = fields.Many2one(
         'account.account',
         string="Unbuild Loss Account",
-        config_parameter='mrp.unbuild.loss_account_id',
         help="Account for unallocated costs in unbuild operations",
-        domain="[('account_type', '=', 'expense'), ('company_id', '=', company_id)]"
+        domain="[('account_type', '=', 'expense_direct_cost'), ('company_id', '=', company_id)]"
     )
+    
+    @api.model
+    def get_values(self):
+        res = super().get_values()
+        ICP = self.env['ir.config_parameter'].sudo()
+        
+        # Obtener cuenta de pérdidas para la compañía actual
+        loss_account_id = ICP.get_param(
+            'mrp.unbuild.loss_account_id.%s' % self.env.company.id
+        )
+        if loss_account_id:
+            res['unbuild_loss_account_id'] = int(loss_account_id)
+        
+        return res
+    
+    def set_values(self):
+        super().set_values()
+        ICP = self.env['ir.config_parameter'].sudo()
+        
+        # Guardar cuenta de pérdidas por compañía
+        if self.unbuild_loss_account_id:
+            ICP.set_param(
+                'mrp.unbuild.loss_account_id.%s' % self.env.company.id,
+                self.unbuild_loss_account_id.id
+            )

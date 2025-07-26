@@ -14,13 +14,13 @@ def post_init_hook(env):
     
     # Asignar permisos de desposte a usuarios MRP existentes
     mrp_users = env.ref('mrp.group_mrp_user').users
-    unbuild_group = env.ref('mrp_unbuild.group_mrp_unbuild_user')  # Corregido: agregado prefijo del módulo
+    unbuild_group = env.ref('mrp_unbuild.group_mrp_unbuild_user')
     if unbuild_group:
         mrp_users.write({'groups_id': [(4, unbuild_group.id)]})
     
     # Asignar permisos de manager de desposte a managers MRP
     mrp_managers = env.ref('mrp.group_mrp_manager').users
-    unbuild_manager_group = env.ref('mrp_unbuild.group_mrp_unbuild_manager')  # Corregido: agregado prefijo del módulo
+    unbuild_manager_group = env.ref('mrp_unbuild.group_mrp_unbuild_manager')
     if unbuild_manager_group:
         mrp_managers.write({'groups_id': [(4, unbuild_manager_group.id)]})
     
@@ -33,7 +33,7 @@ def post_init_hook(env):
             ('company_id', '=', company.id)
         ], limit=1)
         
-        if not loss_account and company.chart_template:
+        if not loss_account and company.chart_template_id:
             # Crear cuenta para pérdidas de desposte
             loss_account = env['account.account'].create({
                 'code': '659999',
