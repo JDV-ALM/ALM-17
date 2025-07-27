@@ -3,7 +3,7 @@
 # Developer: Almus Dev (JDV-ALM) - www.almus.dev
 
 {
-    'name': 'MRP Unbuild Meat Center',
+    'name': 'Almus MRP Unbuild Center',
     'version': '17.0.1.0.0',
     'category': 'Manufacturing',
     'summary': 'Extensión de desmantelamiento para centros de desposte',

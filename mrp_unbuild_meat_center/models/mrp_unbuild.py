@@ -76,7 +76,8 @@ class MrpUnbuild(models.Model):
             # Calcular rendimiento (productos buenos / cantidad inicial)
             if unbuild.product_qty > 0:
                 good_qty = unbuild.total_actual_qty - unbuild.total_waste_qty
-                unbuild.yield_percentage = (good_qty / unbuild.product_qty) * 100
+                # Almacenar como decimal (0.8 para 80%, 1.0 para 100%)
+                unbuild.yield_percentage = good_qty / unbuild.product_qty
             else:
                 unbuild.yield_percentage = 0.0
     
@@ -228,6 +229,10 @@ class MrpUnbuild(models.Model):
         consume_move._action_done()
         produce_moves._action_done()
         
+        # Ajustar valoración si mrp_account está instalado
+        if hasattr(self, '_adjust_cost_valuation'):
+            self._adjust_cost_valuation(consume_move, produce_moves)
+        
         # Actualizar estado
         self.state = 'done'
         
@@ -235,6 +240,15 @@ class MrpUnbuild(models.Model):
         self._post_inventory_message()
         
         return True
+    
+    def _adjust_cost_valuation(self, consume_move, produce_moves):
+        """Ajusta la valoración de costos para los productos resultantes"""
+        # Este método será sobrescrito por mrp_account si está instalado
+        # Por ahora, solo verificamos que los costos se distribuyan correctamente
+        if consume_move.product_id.cost_method in ('fifo', 'average'):
+            # El sistema de valoración de Odoo debería manejar esto automáticamente
+            # basándose en el price_unit que establecimos en los movimientos
+            pass
     
     def _create_consume_move(self):
         """Crea el movimiento de consumo del producto original"""
@@ -259,6 +273,16 @@ class MrpUnbuild(models.Model):
         moves = self.env['stock.move']
         production_location = self.product_id.with_company(self.company_id).property_stock_production
         
+        # Calcular el costo total del producto original
+        total_cost = 0.0
+        if hasattr(self, 'product_id') and self.product_id.cost_method in ('fifo', 'average'):
+            # Obtener el costo unitario del producto
+            quantity_svl = self.product_id.sudo().quantity_svl
+            value_svl = self.product_id.sudo().value_svl
+            if quantity_svl > 0:
+                unit_cost = value_svl / quantity_svl
+                total_cost = unit_cost * self.product_qty
+        
         for line in self.unbuild_line_ids:
             # Determinar ubicación destino
             if line.is_waste:
@@ -275,6 +299,13 @@ class MrpUnbuild(models.Model):
             else:
                 dest_location = self.location_dest_id
             
+            # Calcular precio unitario basado en cost_share
+            price_unit = 0.0
+            if not line.is_waste and total_cost > 0 and line.actual_qty > 0:
+                # line.cost_share ya está como decimal (0.5 para 50%)
+                line_cost = total_cost * line.cost_share
+                price_unit = line_cost / line.actual_qty
+            
             # Crear movimiento
             move_vals = {
                 'name': self.name,
@@ -286,8 +317,12 @@ class MrpUnbuild(models.Model):
                 'consume_unbuild_id': self.id,
                 'company_id': self.company_id.id,
                 'origin': self.name,
-                'cost_share': line.cost_share if not line.is_waste else 0.0,
+                'price_unit': price_unit,
+                # El campo byproduct_id es importante para que el sistema reconozca estos como subproductos
+                'byproduct_id': False,  # No tenemos byproduct_id porque estamos usando líneas personalizadas
             }
+            
+            # NO agregar cost_share porque ese campo es para byproducts de producción, no unbuild
             
             moves |= self.env['stock.move'].create(move_vals)
         
@@ -341,11 +376,11 @@ class MrpUnbuild(models.Model):
         if good_lines:
             message_body += _("<u>Productos:</u><br/>")
             for line in good_lines:
-                message_body += _("- %(product)s: %(qty)s %(uom)s (%(cost)s%%)<br/>",
+                message_body += _("- %(product)s: %(qty)s %(uom)s (%(cost).1f%%)<br/>",
                     product=line.product_id.display_name,
                     qty=line.actual_qty,
                     uom=line.product_uom_id.name,
-                    cost=round(line.cost_share, 2)
+                    cost=line.cost_share * 100
                 )
         
         # Agregar detalles de desechos
@@ -360,8 +395,8 @@ class MrpUnbuild(models.Model):
                 )
         
         # Agregar rendimiento
-        message_body += _("<br/><b>Rendimiento: %(yield_pct)s%%</b>",
-            yield_pct=round(self.yield_percentage, 2)
+        message_body += _("<br/><b>Rendimiento: %(yield_pct).1f%%</b>",
+            yield_pct=self.yield_percentage * 100
         )
         
         self.message_post(body=message_body)

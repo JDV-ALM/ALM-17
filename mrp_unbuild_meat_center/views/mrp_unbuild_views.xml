@@ -6,33 +6,41 @@
         <field name="model">mrp.unbuild</field>
         <field name="inherit_id" ref="mrp.mrp_unbuild_form_view"/>
         <field name="arch" type="xml">
-            <!-- Modificar el header para agregar nuevo estado y botones -->
-            <xpath expr="//header" position="replace">
-                <header>
-                    <button name="action_prepare_lines" 
-                            string="Preparar Desmantelamiento" 
-                            type="object" 
-                            class="btn-primary"
-                            invisible="state != 'draft' or not bom_id"
-                            groups="mrp.group_mrp_user"/>
-                    <button name="action_unbuild" 
-                            string="Desmantelar" 
-                            type="object" 
-                            class="btn-primary"
-                            invisible="state not in ['draft', 'ready']"
-                            groups="mrp.group_mrp_user"/>
-                    <button name="action_validate" 
-                            string="Validar" 
-                            type="object"
-                            class="btn-secondary"
-                            invisible="state == 'ready'"
-                            groups="mrp.group_mrp_user"/>
-                    <field name="state" widget="statusbar" statusbar_visible="draft,ready,done"/>
-                </header>
+            <!-- Agregar botón de preparar líneas antes del botón de validar -->
+            <xpath expr="//button[@name='action_validate']" position="before">
+                <button name="action_prepare_lines" 
+                        string="Preparar Desmantelamiento" 
+                        type="object" 
+                        class="btn-primary"
+                        invisible="state != 'draft' or not bom_id"
+                        groups="mrp.group_mrp_user"/>
+            </xpath>
+            
+            <!-- Ocultar el botón original de validar cuando estamos en ready -->
+            <xpath expr="//button[@name='action_validate']" position="attributes">
+                <attribute name="invisible">state != 'draft'</attribute>
+            </xpath>
+            
+            <!-- Agregar nuevo botón para procesar cuando está en ready -->
+            <xpath expr="//button[@name='action_validate']" position="after">
+                <button name="action_unbuild" 
+                        string="Desmantelar" 
+                        type="object" 
+                        class="btn-primary"
+                        invisible="state != 'ready'"
+                        groups="mrp.group_mrp_user"/>
+            </xpath>
+            
+            <!-- Agregar estado ready al statusbar -->
+            <xpath expr="//field[@name='state']" position="attributes">
+                <attribute name="statusbar_visible">draft,ready,done</attribute>
             </xpath>
             
             <!-- Agregar página de líneas de desmantelamiento después de la información principal -->
-            <xpath expr="//sheet/group" position="after">
+            <xpath expr="//sheet" position="inside">
+                <!-- Campo auxiliar invisible -->
+                <field name="show_unbuild_lines" invisible="1"/>
+                
                 <!-- Mostrar totales cuando hay líneas -->
                 <group invisible="not show_unbuild_lines" string="Resumen">
                     <group>
@@ -134,6 +142,13 @@
                                 Los productos marcados como desecho no recibirán costo y serán enviados a la ubicación de desecho.
                             </p>
                         </div>
+                        
+                        <!-- Mensaje cuando no hay líneas -->
+                        <div class="alert alert-warning" role="alert" invisible="unbuild_line_ids or not bom_id">
+                            <p class="mb-0">
+                                <i class="fa fa-warning"/> Haga clic en "Preparar Desmantelamiento" para generar las líneas de productos basadas en la lista de materiales.
+                            </p>
+                        </div>
                     </page>
                     
                     <!-- Página de información adicional -->
@@ -150,9 +165,6 @@
                         </group>
                     </page>
                 </notebook>
-                
-                <!-- Campo auxiliar invisible -->
-                <field name="show_unbuild_lines" invisible="1"/>
             </xpath>
         </field>
     </record>
@@ -163,18 +175,12 @@
         <field name="model">mrp.unbuild</field>
         <field name="inherit_id" ref="mrp.mrp_unbuild_tree_view"/>
         <field name="arch" type="xml">
-            <!-- Agregar columnas de rendimiento -->
+            <!-- Agregar estado en la vista de árbol -->
             <xpath expr="//field[@name='product_qty']" position="after">
-                <field name="yield_percentage" 
-                       widget="percentage" 
-                       optional="show"
-                       decoration-success="yield_percentage &gt;= 80"
-                       decoration-warning="yield_percentage &gt;= 60 and yield_percentage &lt; 80"
-                       decoration-danger="yield_percentage &lt; 60"/>
-                <field name="total_waste_qty" 
-                       widget="float" 
-                       digits="[16,3]"
-                       optional="hide"/>
+                <field name="state" 
+                       decoration-info="state == 'ready'"
+                       decoration-success="state == 'done'"
+                       widget="badge"/>
             </xpath>
         </field>
     </record>
@@ -183,30 +189,13 @@
     <record id="mrp_unbuild_search_view_meat_center" model="ir.ui.view">
         <field name="name">mrp.unbuild.search.meat.center</field>
         <field name="model">mrp.unbuild</field>
-        <field name="inherit_id" ref="mrp.view_mrp_unbuild_filter"/>
+        <field name="inherit_id" ref="mrp.mrp_unbuild_search_view"/>
         <field name="arch" type="xml">
             <!-- Agregar filtros adicionales -->
             <xpath expr="//filter[@name='draft']" position="after">
                 <filter string="Listo para Procesar" 
                         name="ready" 
                         domain="[('state', '=', 'ready')]"/>
-                <separator/>
-                <filter string="Alto Rendimiento" 
-                        name="high_yield" 
-                        domain="[('yield_percentage', '&gt;=', 80)]"/>
-                <filter string="Rendimiento Medio" 
-                        name="medium_yield" 
-                        domain="[('yield_percentage', '&gt;=', 60), ('yield_percentage', '&lt;', 80)]"/>
-                <filter string="Bajo Rendimiento" 
-                        name="low_yield" 
-                        domain="[('yield_percentage', '&lt;', 60)]"/>
-            </xpath>
-            
-            <!-- Agregar agrupaciones -->
-            <xpath expr="//group" position="inside">
-                <filter string="Rendimiento" 
-                        name="group_by_yield" 
-                        context="{'group_by': 'yield_percentage:interval(20)'}"/>
             </xpath>
         </field>
     </record>
@@ -215,20 +204,14 @@
     <record id="mrp_unbuild_kanban_view_meat_center" model="ir.ui.view">
         <field name="name">mrp.unbuild.kanban.meat.center</field>
         <field name="model">mrp.unbuild</field>
-        <field name="inherit_id" ref="mrp.view_mrp_unbuild_kanban"/>
+        <field name="inherit_id" ref="mrp.mrp_unbuild_kanban_view"/>
         <field name="arch" type="xml">
-            <!-- Agregar información de rendimiento en las tarjetas -->
-            <xpath expr="//div[hasclass('o_kanban_record_bottom')]" position="inside">
-                <div t-if="record.state.raw_value == 'done'" class="text-muted">
-                    <span>Rendimiento: </span>
-                    <field name="yield_percentage" widget="percentage"/>
+            <!-- Agregar información del estado en las tarjetas -->
+            <xpath expr="//div[@class='row']" position="after">
+                <div t-if="record.state.raw_value == 'ready'" class="text-info mt-2">
+                    <i class="fa fa-clock-o"/> Listo para Procesar
                 </div>
             </xpath>
         </field>
-    </record>
-    
-    <!-- Acción de ventana mejorada -->
-    <record id="mrp.mrp_unbuild_action" model="ir.actions.act_window">
-        <field name="context">{'search_default_todo': True}</field>
     </record>
 </odoo>
