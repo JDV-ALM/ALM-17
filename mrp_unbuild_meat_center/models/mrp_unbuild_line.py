@@ -92,7 +92,7 @@ class MrpUnbuildLine(models.Model):
                 
                 if total_good_qty > 0:
                     line_qty_base = line._get_qty_in_base_uom()
-                    line.cost_share = (line_qty_base / total_good_qty) * 100
+                    line.cost_share = (line_qty_base / total_good_qty)
                 else:
                     line.cost_share = 0.0
     
