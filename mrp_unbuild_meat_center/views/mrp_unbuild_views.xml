@@ -1,0 +1,234 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Vista de formulario para mrp.unbuild -->
+    <record id="mrp_unbuild_form_view_meat_center" model="ir.ui.view">
+        <field name="name">mrp.unbuild.form.meat.center</field>
+        <field name="model">mrp.unbuild</field>
+        <field name="inherit_id" ref="mrp.mrp_unbuild_form_view"/>
+        <field name="arch" type="xml">
+            <!-- Modificar el header para agregar nuevo estado y botones -->
+            <xpath expr="//header" position="replace">
+                <header>
+                    <button name="action_prepare_lines" 
+                            string="Preparar Desmantelamiento" 
+                            type="object" 
+                            class="btn-primary"
+                            invisible="state != 'draft' or not bom_id"
+                            groups="mrp.group_mrp_user"/>
+                    <button name="action_unbuild" 
+                            string="Desmantelar" 
+                            type="object" 
+                            class="btn-primary"
+                            invisible="state not in ['draft', 'ready']"
+                            groups="mrp.group_mrp_user"/>
+                    <button name="action_validate" 
+                            string="Validar" 
+                            type="object"
+                            class="btn-secondary"
+                            invisible="state == 'ready'"
+                            groups="mrp.group_mrp_user"/>
+                    <field name="state" widget="statusbar" statusbar_visible="draft,ready,done"/>
+                </header>
+            </xpath>
+            
+            <!-- Agregar página de líneas de desmantelamiento después de la información principal -->
+            <xpath expr="//sheet/group" position="after">
+                <!-- Mostrar totales cuando hay líneas -->
+                <group invisible="not show_unbuild_lines" string="Resumen">
+                    <group>
+                        <field name="total_expected_qty" widget="float" digits="[16,3]"/>
+                        <field name="total_actual_qty" widget="float" digits="[16,3]"/>
+                    </group>
+                    <group>
+                        <field name="total_waste_qty" widget="float" digits="[16,3]"/>
+                        <field name="yield_percentage" widget="percentage"/>
+                    </group>
+                </group>
+                
+                <!-- Notebook para líneas -->
+                <notebook invisible="not show_unbuild_lines">
+                    <page string="Productos Resultantes" name="unbuild_lines">
+                        <field name="unbuild_line_ids" 
+                               widget="one2many"
+                               mode="tree,kanban"
+                               context="{'default_company_id': company_id}">
+                            <tree string="Líneas de Desmantelamiento" 
+                                  editable="bottom"
+                                  decoration-muted="is_waste"
+                                  decoration-bf="not is_waste">
+                                <field name="sequence" widget="handle"/>
+                                <field name="product_id" 
+                                       options="{'no_create': True}"
+                                       domain="[('type', 'in', ['product', 'consu'])]"/>
+                                <field name="product_tracking" column_invisible="True"/>
+                                <field name="expected_qty" 
+                                       widget="float" 
+                                       digits="[16,3]"
+                                       readonly="1"
+                                       optional="show"/>
+                                <field name="actual_qty" 
+                                       widget="float" 
+                                       digits="[16,3]"
+                                       decoration-danger="actual_qty &lt; 0"
+                                       required="1"/>
+                                <field name="product_uom_category_id" column_invisible="True"/>
+                                <field name="product_uom_id" 
+                                       groups="uom.group_uom"
+                                       domain="[('category_id', '=', product_uom_category_id)]"
+                                       options="{'no_create': True}"/>
+                                <field name="lot_id" 
+                                       groups="stock.group_production_lot"
+                                       domain="[('product_id', '=', product_id), ('company_id', '=', parent.company_id)]"
+                                       context="{'default_product_id': product_id, 'default_company_id': parent.company_id}"
+                                       invisible="product_tracking == 'none'"
+                                       required="product_tracking != 'none'"/>
+                                <field name="is_waste" string="Desecho"/>
+                                <field name="cost_share" 
+                                       widget="percentage" 
+                                       optional="show"
+                                       readonly="1"/>
+                                <field name="company_id" column_invisible="True"/>
+                            </tree>
+                            
+                            <!-- Vista kanban para líneas -->
+                            <kanban class="o_kanban_mobile">
+                                <field name="product_id"/>
+                                <field name="actual_qty"/>
+                                <field name="product_uom_id"/>
+                                <field name="is_waste"/>
+                                <field name="cost_share"/>
+                                <templates>
+                                    <t t-name="kanban-box">
+                                        <div t-attf-class="oe_kanban_card oe_kanban_global_click">
+                                            <div class="o_kanban_record_top">
+                                                <div class="o_kanban_record_headings">
+                                                    <strong class="o_kanban_record_title">
+                                                        <field name="product_id"/>
+                                                    </strong>
+                                                </div>
+                                            </div>
+                                            <div class="o_kanban_record_body">
+                                                <div>
+                                                    <strong>Cantidad: </strong>
+                                                    <field name="actual_qty"/> 
+                                                    <field name="product_uom_id"/>
+                                                </div>
+                                                <div t-if="record.is_waste.raw_value" class="text-danger">
+                                                    <i class="fa fa-trash"/> Desecho
+                                                </div>
+                                                <div t-else="">
+                                                    <strong>Costo: </strong>
+                                                    <field name="cost_share" widget="percentage"/>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </t>
+                                </templates>
+                            </kanban>
+                        </field>
+                        
+                        <!-- Nota informativa -->
+                        <div class="alert alert-info" role="alert" invisible="state != 'ready'">
+                            <p class="mb-0">
+                                <i class="fa fa-info-circle"/> Ajuste las cantidades reales obtenidas del desmantelamiento.
+                                Los productos marcados como desecho no recibirán costo y serán enviados a la ubicación de desecho.
+                            </p>
+                        </div>
+                    </page>
+                    
+                    <!-- Página de información adicional -->
+                    <page string="Información Adicional" name="extra_info">
+                        <group>
+                            <group string="Fechas">
+                                <field name="create_date" string="Fecha de Creación"/>
+                                <field name="write_date" string="Última Modificación" readonly="1"/>
+                            </group>
+                            <group string="Responsable">
+                                <field name="create_uid" string="Creado por" readonly="1"/>
+                                <field name="write_uid" string="Modificado por" readonly="1"/>
+                            </group>
+                        </group>
+                    </page>
+                </notebook>
+                
+                <!-- Campo auxiliar invisible -->
+                <field name="show_unbuild_lines" invisible="1"/>
+            </xpath>
+        </field>
+    </record>
+    
+    <!-- Vista de árbol para mrp.unbuild con campos adicionales -->
+    <record id="mrp_unbuild_tree_view_meat_center" model="ir.ui.view">
+        <field name="name">mrp.unbuild.tree.meat.center</field>
+        <field name="model">mrp.unbuild</field>
+        <field name="inherit_id" ref="mrp.mrp_unbuild_tree_view"/>
+        <field name="arch" type="xml">
+            <!-- Agregar columnas de rendimiento -->
+            <xpath expr="//field[@name='product_qty']" position="after">
+                <field name="yield_percentage" 
+                       widget="percentage" 
+                       optional="show"
+                       decoration-success="yield_percentage &gt;= 80"
+                       decoration-warning="yield_percentage &gt;= 60 and yield_percentage &lt; 80"
+                       decoration-danger="yield_percentage &lt; 60"/>
+                <field name="total_waste_qty" 
+                       widget="float" 
+                       digits="[16,3]"
+                       optional="hide"/>
+            </xpath>
+        </field>
+    </record>
+    
+    <!-- Vista de búsqueda mejorada -->
+    <record id="mrp_unbuild_search_view_meat_center" model="ir.ui.view">
+        <field name="name">mrp.unbuild.search.meat.center</field>
+        <field name="model">mrp.unbuild</field>
+        <field name="inherit_id" ref="mrp.view_mrp_unbuild_filter"/>
+        <field name="arch" type="xml">
+            <!-- Agregar filtros adicionales -->
+            <xpath expr="//filter[@name='draft']" position="after">
+                <filter string="Listo para Procesar" 
+                        name="ready" 
+                        domain="[('state', '=', 'ready')]"/>
+                <separator/>
+                <filter string="Alto Rendimiento" 
+                        name="high_yield" 
+                        domain="[('yield_percentage', '&gt;=', 80)]"/>
+                <filter string="Rendimiento Medio" 
+                        name="medium_yield" 
+                        domain="[('yield_percentage', '&gt;=', 60), ('yield_percentage', '&lt;', 80)]"/>
+                <filter string="Bajo Rendimiento" 
+                        name="low_yield" 
+                        domain="[('yield_percentage', '&lt;', 60)]"/>
+            </xpath>
+            
+            <!-- Agregar agrupaciones -->
+            <xpath expr="//group" position="inside">
+                <filter string="Rendimiento" 
+                        name="group_by_yield" 
+                        context="{'group_by': 'yield_percentage:interval(20)'}"/>
+            </xpath>
+        </field>
+    </record>
+    
+    <!-- Vista Kanban mejorada -->
+    <record id="mrp_unbuild_kanban_view_meat_center" model="ir.ui.view">
+        <field name="name">mrp.unbuild.kanban.meat.center</field>
+        <field name="model">mrp.unbuild</field>
+        <field name="inherit_id" ref="mrp.view_mrp_unbuild_kanban"/>
+        <field name="arch" type="xml">
+            <!-- Agregar información de rendimiento en las tarjetas -->
+            <xpath expr="//div[hasclass('o_kanban_record_bottom')]" position="inside">
+                <div t-if="record.state.raw_value == 'done'" class="text-muted">
+                    <span>Rendimiento: </span>
+                    <field name="yield_percentage" widget="percentage"/>
+                </div>
+            </xpath>
+        </field>
+    </record>
+    
+    <!-- Acción de ventana mejorada -->
+    <record id="mrp.mrp_unbuild_action" model="ir.actions.act_window">
+        <field name="context">{'search_default_todo': True}</field>
+    </record>
+</odoo>
