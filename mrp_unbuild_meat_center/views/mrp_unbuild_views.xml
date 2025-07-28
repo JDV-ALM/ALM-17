@@ -45,7 +45,6 @@
                 <group invisible="not show_unbuild_lines" string="Resumen">
                     <group>
                         <field name="total_expected_qty" widget="float" digits="[16,3]"/>
-                        <field name="total_actual_qty" widget="float" digits="[16,3]"/>
                     </group>
                     <group>
                         <field name="total_waste_qty" widget="float" digits="[16,3]"/>
