@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Heredar la vista de formulario de product.pricelist.item -->
+    <record id="product_pricelist_item_form_view_manufacturing_alt_cost" model="ir.ui.view">
+        <field name="name">product.pricelist.item.form.manufacturing.alt.cost</field>
+        <field name="model">product.pricelist.item</field>
+        <field name="inherit_id" ref="product.product_pricelist_item_form_view"/>
+        <field name="arch" type="xml">
+            <!-- Añadir información adicional cuando se selecciona manufacturing_alt_cost -->
+            <xpath expr="//field[@name='base_pricelist_id']" position="after">
+                <div class="alert alert-info" 
+                     role="alert" 
+                     invisible="base != 'manufacturing_alt_cost'">
+                    <h4 class="alert-heading">
+                        <i class="fa fa-cogs"/> Manufacturing Alternative Cost Information
+                    </h4>
+                    <p class="mb-2">
+                        The price will be calculated based on the product's manufacturing alternative cost.
+                        <br/>
+                        This cost is automatically calculated from BOM components' alternative costs.
+                    </p>
+                    <ul class="mb-0 ps-3">
+                        <li><strong>Manufactured products:</strong> Uses calculated manufacturing cost from BOM</li>
+                        <li><strong>Purchased products:</strong> Falls back to regular alternative cost</li>
+                        <li><strong>Warning:</strong> Products with missing component costs will show alerts</li>
+                    </ul>
+                </div>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Vista de búsqueda mejorada -->
+    <record id="product_pricelist_item_search_manufacturing_alt_cost" model="ir.ui.view">
+        <field name="name">product.pricelist.item.search.manufacturing.alt.cost</field>
+        <field name="model">product.pricelist.item</field>
+        <field name="inherit_id" ref="product.product_pricelist_item_view_search"/>
+        <field name="arch" type="xml">
+            <xpath expr="//filter[@name='Variant Rule']" position="after">
+                <separator/>
+                <filter string="Based on Manuf. Cost" 
+                        name="manufacturing_alt_cost_based" 
+                        domain="[('base', '=', 'manufacturing_alt_cost')]"
+                        groups="product.group_sale_pricelist"/>
+            </xpath>
+            <xpath expr="//filter[@name='groupby_product_variant']" position="after">
+                <filter string="Base" 
+                        name="groupby_base" 
+                        domain="[]" 
+                        context="{'group_by': 'base'}"
+                        groups="product.group_sale_pricelist"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

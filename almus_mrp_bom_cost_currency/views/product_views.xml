@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Product Product Form View -->
+    <record id="product_product_form_view_manufacturing_cost" model="ir.ui.view">
+        <field name="name">product.product.form.manufacturing.cost</field>
+        <field name="model">product.product</field>
+        <field name="inherit_id" ref="almus_product_cost_currency.product_product_form_view_cost_currency"/>
+        <field name="arch" type="xml">
+            <!-- Add manufacturing cost field after alt_cost -->
+            <xpath expr="//div[@name='alt_cost_uom']" position="after">
+                <label for="manufacturing_alt_cost" 
+                       invisible="not alt_currency_id"/>
+                <div name="manufacturing_alt_cost_uom" 
+                     invisible="not alt_currency_id">
+                    <div class="d-flex align-items-center">
+                        <field name="manufacturing_alt_cost" 
+                               class="oe_inline" 
+                               widget='monetary' 
+                               options="{'currency_field': 'alt_currency_id', 'field_digits': True}"
+                               readonly="1"/>
+                        <field name="manufacturing_cost_state" invisible="1"/>
+                        <!-- Warning icon for manufacturing cost issues -->
+                        <span class="fa fa-exclamation-triangle text-warning ms-2" 
+                              title="Manufacturing cost calculation has issues. Check BOM components."
+                              invisible="manufacturing_cost_state == 'ok'"/>
+                        <span groups="uom.group_uom" class="ms-1"> per 
+                            <field name="uom_name" class="oe_inline"/>
+                        </span>
+                    </div>
+                    <div class="text-muted small" 
+                         invisible="manufacturing_cost_state == 'ok'">
+                        <span invisible="manufacturing_cost_state != 'no_bom'">
+                            No Bill of Materials found
+                        </span>
+                        <span invisible="manufacturing_cost_state != 'empty_bom'">
+                            Bill of Materials has no components
+                        </span>
+                        <span invisible="manufacturing_cost_state != 'warning'">
+                            Some components have missing costs or circular dependencies
+                        </span>
+                    </div>
+                </div>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Product Template Form View -->
+    <record id="product_template_form_view_manufacturing_cost" model="ir.ui.view">
+        <field name="name">product.template.form.manufacturing.cost</field>
+        <field name="model">product.template</field>
+        <field name="inherit_id" ref="almus_product_cost_currency.product_template_form_view_cost_currency"/>
+        <field name="arch" type="xml">
+            <!-- Add manufacturing cost field after alt_cost for single variant products -->
+            <xpath expr="//div[@name='alt_cost_uom']" position="after">
+                <label for="manufacturing_alt_cost" 
+                       invisible="product_variant_count > 1 or not alt_currency_id"/>
+                <div name="manufacturing_alt_cost_uom" 
+                     invisible="product_variant_count > 1 or not alt_currency_id">
+                    <div class="d-flex align-items-center">
+                        <field name="manufacturing_alt_cost" 
+                               class="oe_inline" 
+                               widget='monetary' 
+                               options="{'currency_field': 'alt_currency_id', 'field_digits': True}"
+                               readonly="1"/>
+                        <field name="manufacturing_cost_state" invisible="1"/>
+                        <!-- Warning icon for manufacturing cost issues -->
+                        <span class="fa fa-exclamation-triangle text-warning ms-2" 
+                              title="Manufacturing cost calculation has issues. Check BOM components."
+                              invisible="manufacturing_cost_state == 'ok'"/>
+                        <span groups="uom.group_uom" class="ms-1"> per 
+                            <field name="uom_name" class="oe_inline"/>
+                        </span>
+                    </div>
+                    <div class="text-muted small" 
+                         invisible="manufacturing_cost_state == 'ok'">
+                        <span invisible="manufacturing_cost_state != 'no_bom'">
+                            No Bill of Materials found
+                        </span>
+                        <span invisible="manufacturing_cost_state != 'empty_bom'">
+                            Bill of Materials has no components
+                        </span>
+                        <span invisible="manufacturing_cost_state != 'warning'">
+                            Some components have missing costs or circular dependencies
+                        </span>
+                    </div>
+                </div>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Product Variant Tree View -->
+    <record id="product_product_tree_view_manufacturing_cost" model="ir.ui.view">
+        <field name="name">product.product.tree.manufacturing.cost</field>
+        <field name="model">product.product</field>
+        <field name="inherit_id" ref="almus_product_cost_currency.product_product_tree_view_cost_currency"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='alt_cost']" position="after">
+                <field name="manufacturing_cost_state" column_invisible="True"/>
+                <field name="manufacturing_alt_cost" 
+                       optional="show" 
+                       string="Manufacturing Cost (Alt. Currency)"
+                       widget='monetary' 
+                       options="{'currency_field': 'alt_currency_id'}"
+                       decoration-warning="manufacturing_cost_state != 'ok'"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Product Template Tree View -->
+    <record id="product_template_tree_view_manufacturing_cost" model="ir.ui.view">
+        <field name="name">product.template.tree.manufacturing.cost</field>
+        <field name="model">product.template</field>
+        <field name="inherit_id" ref="almus_product_cost_currency.product_template_tree_view_cost_currency"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='alt_cost']" position="after">
+                <field name="manufacturing_cost_state" column_invisible="True"/>
+                <field name="manufacturing_alt_cost" 
+                       optional="show" 
+                       string="Manufacturing Cost (Alt. Currency)"
+                       widget='monetary' 
+                       options="{'currency_field': 'alt_currency_id'}"
+                       decoration-warning="manufacturing_cost_state != 'ok'"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Add manual recalculation action for products with BOM -->
+    <record id="action_recalculate_manufacturing_costs" model="ir.actions.server">
+        <field name="name">Recalculate Manufacturing Costs</field>
+        <field name="model_id" ref="product.model_product_product"/>
+        <field name="binding_model_id" ref="product.model_product_product"/>
+        <field name="binding_view_types">list,form</field>
+        <field name="state">code</field>
+        <field name="code">
+# Recalcular costos de manufactura para productos seleccionados
+if records:
+    manufacturing_products = records.filtered(lambda p: p.has_bom())
+    if manufacturing_products:
+        manufacturing_products._compute_manufacturing_alt_cost()
+        action = {
+            'type': 'ir.actions.client',
+            'tag': 'display_notification',
+            'params': {
+                'type': 'success',
+                'title': 'Manufacturing Costs Updated',
+                'message': f'Recalculated manufacturing costs for {len(manufacturing_products)} products.',
+            }
+        }
+    else:
+        action = {
+            'type': 'ir.actions.client',
+            'tag': 'display_notification',
+            'params': {
+                'type': 'warning',
+                'title': 'No Manufacturing Products',
+                'message': 'Selected products do not have Bills of Materials.',
+            }
+        }
+        </field>
+    </record>
+</odoo>
