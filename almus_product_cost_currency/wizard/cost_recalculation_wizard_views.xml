@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_almus_cost_recalculation_wizard" model="ir.ui.view">
+        <field name="name">almus.cost.recalculation.wizard.form</field>
+        <field name="model">almus.cost.recalculation.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Confirm Cost Recalculation">
+                <group>
+                    <div class="alert alert-warning" role="alert">
+                        <h4 class="alert-heading">
+                            <i class="fa fa-warning"/> Large Dataset Warning
+                        </h4>
+                        <p>
+                            You are about to recalculate alternative costs for <strong><field name="products_count" class="oe_inline"/></strong> products.
+                        </p>
+                        <p class="mb-0">
+                            This operation may take several minutes. The system will process products in batches to avoid performance issues.
+                        </p>
+                    </div>
+                    <group>
+                        <field name="currency_id" readonly="1"/>
+                    </group>
+                </group>
+                <footer>
+                    <button name="action_confirm_recalculation" 
+                            string="Confirm Recalculation" 
+                            type="object" 
+                            class="btn-primary"
+                            data-hotkey="q"/>
+                    <button string="Cancel" 
+                            class="btn-secondary" 
+                            special="cancel" 
+                            data-hotkey="x"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+</odoo>

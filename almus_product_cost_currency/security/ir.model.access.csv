@@ -1,1 +1,2 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_almus_cost_recalculation_wizard,access.almus.cost.recalculation.wizard,model_almus_cost_recalculation_wizard,stock.group_stock_manager,1,1,1,1

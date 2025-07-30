@@ -9,15 +9,18 @@
             <!-- Add cost in currency field after standard_price -->
             <xpath expr="//label[@for='standard_price']/../div[@name='standard_price_uom']" position="after">
                 <label for="alt_cost" 
-                       invisible="not alt_currency_id"/>
+                       invisible="not alt_currency_id"
+                       groups="base.group_user"/>
                 <div name="alt_cost_uom" 
-                     invisible="not alt_currency_id">
+                     invisible="not alt_currency_id"
+                     groups="base.group_user">
                     <field name="alt_cost" 
                            class="oe_inline" 
                            widget='monetary' 
                            options="{'currency_field': 'alt_currency_id', 'field_digits': True}"
-                           readonly="1"/>
-                    <field name="alt_currency_id" invisible="1"/>
+                           readonly="1"
+                           force_save="1"/>
+                    <field name="alt_currency_id" invisible="1" force_save="1"/>
                     <span groups="uom.group_uom"> per 
                         <field name="uom_name" class="oe_inline"/>
                     </span>
@@ -34,16 +37,20 @@
         <field name="arch" type="xml">
             <!-- Add cost in currency field after standard_price for single variant products -->
             <xpath expr="//label[@for='standard_price']/../div[@name='standard_price_uom']" position="after">
+                <field name="show_alt_cost" invisible="1"/>
                 <label for="alt_cost" 
-                       invisible="product_variant_count > 1 or not alt_currency_id"/>
+                       invisible="not show_alt_cost"
+                       groups="base.group_user"/>
                 <div name="alt_cost_uom" 
-                     invisible="product_variant_count > 1 or not alt_currency_id">
+                     invisible="not show_alt_cost"
+                     groups="base.group_user">
                     <field name="alt_cost" 
                            class="oe_inline" 
                            widget='monetary' 
                            options="{'currency_field': 'alt_currency_id', 'field_digits': True}"
-                           readonly="1"/>
-                    <field name="alt_currency_id" invisible="1"/>
+                           readonly="1"
+                           force_save="1"/>
+                    <field name="alt_currency_id" invisible="1" force_save="1"/>
                     <span groups="uom.group_uom"> per 
                         <field name="uom_name" class="oe_inline"/>
                     </span>
@@ -64,7 +71,9 @@
                        optional="show" 
                        string="Cost (Alt. Currency)"
                        widget='monetary' 
-                       options="{'currency_field': 'alt_currency_id'}"/>
+                       options="{'currency_field': 'alt_currency_id'}"
+                       groups="base.group_user"
+                       readonly="1"/>
             </xpath>
         </field>
     </record>
@@ -81,7 +90,32 @@
                        optional="show" 
                        string="Cost (Alt. Currency)"
                        widget='monetary' 
-                       options="{'currency_field': 'alt_currency_id'}"/>
+                       options="{'currency_field': 'alt_currency_id'}"
+                       groups="base.group_user"
+                       readonly="1"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Search View para facilitar búsquedas -->
+    <record id="product_product_search_view_cost_currency" model="ir.ui.view">
+        <field name="name">product.product.search.cost.currency</field>
+        <field name="model">product.product</field>
+        <field name="inherit_id" ref="product.product_search_form_view"/>
+        <field name="arch" type="xml">
+            <xpath expr="//filter[@name='filter_to_sell']" position="after">
+                <separator/>
+                <filter string="With Alternative Cost" 
+                        name="filter_alt_cost" 
+                        domain="[('alt_currency_id', '!=', False)]"/>
+                <filter string="Without Alternative Cost" 
+                        name="filter_no_alt_cost" 
+                        domain="[('alt_currency_id', '=', False)]"/>
+            </xpath>
+            <xpath expr="//group[last()]" position="inside">
+                <filter string="Alternative Currency" 
+                        name="group_alt_currency" 
+                        context="{'group_by': 'alt_currency_id'}"/>
             </xpath>
         </field>
     </record>
