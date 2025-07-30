@@ -8,19 +8,20 @@
         <field name="arch" type="xml">
             <!-- Add cost in currency field after standard_price -->
             <xpath expr="//label[@for='standard_price']/../div[@name='standard_price_uom']" position="after">
+                <!-- Add the currency field first (invisible) -->
+                <field name="alt_currency_id" invisible="1" force_save="1"/>
+                
+                <!-- Show the alt cost section only when currency is set -->
                 <label for="alt_cost" 
-                       invisible="not alt_currency_id"
-                       groups="base.group_user"/>
+                       invisible="not alt_currency_id"/>
                 <div name="alt_cost_uom" 
-                     invisible="not alt_currency_id"
-                     groups="base.group_user">
+                     invisible="not alt_currency_id">
                     <field name="alt_cost" 
                            class="oe_inline" 
                            widget='monetary' 
                            options="{'currency_field': 'alt_currency_id', 'field_digits': True}"
                            readonly="1"
                            force_save="1"/>
-                    <field name="alt_currency_id" invisible="1" force_save="1"/>
                     <span groups="uom.group_uom"> per 
                         <field name="uom_name" class="oe_inline"/>
                     </span>
@@ -37,20 +38,21 @@
         <field name="arch" type="xml">
             <!-- Add cost in currency field after standard_price for single variant products -->
             <xpath expr="//label[@for='standard_price']/../div[@name='standard_price_uom']" position="after">
+                <!-- Add helper fields first (invisible) -->
                 <field name="show_alt_cost" invisible="1"/>
+                <field name="alt_currency_id" invisible="1" force_save="1"/>
+                
+                <!-- Show the alt cost section based on show_alt_cost -->
                 <label for="alt_cost" 
-                       invisible="not show_alt_cost"
-                       groups="base.group_user"/>
+                       invisible="not show_alt_cost"/>
                 <div name="alt_cost_uom" 
-                     invisible="not show_alt_cost"
-                     groups="base.group_user">
+                     invisible="not show_alt_cost">
                     <field name="alt_cost" 
                            class="oe_inline" 
                            widget='monetary' 
                            options="{'currency_field': 'alt_currency_id', 'field_digits': True}"
                            readonly="1"
                            force_save="1"/>
-                    <field name="alt_currency_id" invisible="1" force_save="1"/>
                     <span groups="uom.group_uom"> per 
                         <field name="uom_name" class="oe_inline"/>
                     </span>
@@ -72,7 +74,6 @@
                        string="Cost (Alt. Currency)"
                        widget='monetary' 
                        options="{'currency_field': 'alt_currency_id'}"
-                       groups="base.group_user"
                        readonly="1"/>
             </xpath>
         </field>
@@ -91,7 +92,6 @@
                        string="Cost (Alt. Currency)"
                        widget='monetary' 
                        options="{'currency_field': 'alt_currency_id'}"
-                       groups="base.group_user"
                        readonly="1"/>
             </xpath>
         </field>

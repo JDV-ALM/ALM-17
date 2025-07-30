@@ -81,12 +81,15 @@ class ProductProduct(models.Model):
             else:
                 product.alt_cost = 0.0
 
-    @api.model
-    def create(self, vals):
+    @api.model_create_multi
+    def create(self, vals_list):
         """Override create to set default alt_currency_id if not provided"""
-        if 'alt_currency_id' not in vals:
-            vals['alt_currency_id'] = self._get_default_alt_currency()
-        return super().create(vals)
+        default_currency = self._get_default_alt_currency()
+        if default_currency:
+            for vals in vals_list:
+                if 'alt_currency_id' not in vals:
+                    vals['alt_currency_id'] = default_currency
+        return super().create(vals_list)
 
     @api.model
     def _update_alt_currency_from_settings(self, currency_id):

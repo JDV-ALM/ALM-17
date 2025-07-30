@@ -107,17 +107,15 @@ class ResConfigSettings(models.TransientModel):
                 }
             }
         else:
-            # For smaller datasets, recalculate directly
-            self.env['product.product'].sudo().action_recalculate_alt_costs()
-            
+            # For smaller datasets, show confirmation dialog
             return {
-                'type': 'ir.actions.client',
-                'tag': 'display_notification',
-                'params': {
-                    'title': _('Success'),
-                    'message': _('Alternative costs have been recalculated for %s products.') % products_count,
-                    'type': 'success',
-                    'sticky': False,
+                'type': 'ir.actions.act_window',
+                'res_model': 'almus.cost.recalculation.wizard',
+                'view_mode': 'form',
+                'target': 'new',
+                'context': {
+                    'default_products_count': products_count,
+                    'default_currency_id': self.product_alt_currency_id.id,
                 }
             }
 

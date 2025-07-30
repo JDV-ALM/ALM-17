@@ -11,43 +11,35 @@
                     <setting id="product_cost_currency_setting" 
                              string="Moneda de Costo Alternativa" 
                              help="Establece la moneda predeterminada para mostrar los costos de productos además de la moneda de la compañía">
-                        <div class="content-group">
-                            <div class="row mt16">
-                                <label for="product_alt_currency_id" class="col-lg-3 o_light_label"/>
-                                <field name="product_alt_currency_id" 
-                                       class="col-lg-3"
-                                       options="{'no_create': True, 'no_open': True}"/>
-                            </div>
-                            <div class="row">
-                                <div class="col-lg-9 offset-lg-3">
-                                    <div class="text-muted">
-                                        Esta moneda se utilizará para mostrar un campo de costo adicional en los productos.
-                                        El costo se convertirá automáticamente desde la moneda de la compañía.
-                                    </div>
-                                    <field name="alt_currency_last_update" 
-                                           invisible="not product_alt_currency_id"
-                                           class="text-info mt-2"/>
-                                </div>
-                            </div>
-                            <div class="row mt16" invisible="not product_alt_currency_id">
-                                <div class="col-lg-9 offset-lg-3">
-                                    <button name="action_recalculate_alt_costs" 
-                                            type="object" 
-                                            string="Recalcular Costos Alternativos" 
-                                            class="btn-primary"
-                                            icon="fa-refresh"
-                                            confirm="¿Está seguro de recalcular todos los costos alternativos? Esta acción puede tomar varios minutos en bases de datos grandes."
-                                            groups="stock.group_stock_manager"/>
-                                    <button name="action_view_products_alt_currency" 
-                                            type="object" 
-                                            string="Ver Productos" 
-                                            class="btn-link"
-                                            icon="fa-arrow-right"/>
-                                    <div class="text-warning mt-2">
-                                        <i class="fa fa-warning"/> <b>Nota:</b> El recálculo masivo puede tomar tiempo si tiene muchos productos.
-                                    </div>
-                                </div>
-                            </div>
+                        <field name="product_alt_currency_id" 
+                               class="o_light_label" 
+                               options="{'no_create': True, 'no_open': True}"/>
+                        <div class="text-muted">
+                            Esta moneda se utilizará para mostrar un campo de costo adicional en los productos.
+                            El costo se convertirá automáticamente desde la moneda de la compañía.
+                        </div>
+                        <field name="alt_currency_last_update" 
+                               invisible="not product_alt_currency_id"
+                               class="text-info mt-1 d-block"/>
+                    </setting>
+                    <setting invisible="not product_alt_currency_id"
+                             id="product_cost_actions"
+                             string="">
+                        <div class="mt8">
+                            <button name="action_recalculate_alt_costs" 
+                                    type="object" 
+                                    string="Recalcular Costos Alternativos" 
+                                    class="btn-primary"
+                                    icon="fa-refresh"
+                                    groups="stock.group_stock_manager"/>
+                            <button name="action_view_products_alt_currency" 
+                                    type="object" 
+                                    string="Ver Productos" 
+                                    class="btn-link ms-2"
+                                    icon="fa-arrow-right"/>
+                        </div>
+                        <div class="text-warning mt-2" role="status">
+                            <i class="fa fa-warning"/> <b>Nota:</b> El recálculo masivo puede tomar tiempo si tiene muchos productos.
                         </div>
                     </setting>
                 </block>
