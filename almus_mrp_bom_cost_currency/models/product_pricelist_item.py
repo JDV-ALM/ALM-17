@@ -73,18 +73,14 @@ class ProductPricelistItem(models.Model):
             # Producto manufacturado: usar manufacturing_alt_cost
             price = product.manufacturing_alt_cost
             
-            # Verificar estado del cálculo
+            # CORRECCIÓN: Eliminar notificación del bus que puede causar spam
+            # Solo registrar en log si hay problemas
             if product.manufacturing_cost_state != 'ok':
-                # Mostrar warning pero permitir continuar
-                self.env['bus.bus']._sendone(self.env.user.partner_id, 'simple_notification', {
-                    'type': 'warning',
-                    'title': _('Manufacturing Cost Warning'),
-                    'message': _(
-                        'Product %s has manufacturing cost calculation issues. '
-                        'Please review BOM components costs.',
-                        product.display_name
-                    ),
-                })
+                _logger.warning(
+                    'Product %s has manufacturing cost calculation issues. State: %s',
+                    product.display_name,
+                    product.manufacturing_cost_state
+                )
         else:
             # Producto comprado: usar alt_cost como fallback
             price = product.alt_cost

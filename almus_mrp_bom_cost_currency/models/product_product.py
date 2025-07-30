@@ -31,12 +31,15 @@ class ProductProduct(models.Model):
     @api.depends('bom_ids', 'bom_ids.bom_line_ids', 'bom_ids.bom_line_ids.product_id.alt_cost')
     def _compute_manufacturing_alt_cost(self):
         """Compute manufacturing alternative cost based on BOM components"""
+        # CORRECCIÓN: Crear caché de BOMs para evitar búsquedas repetitivas
+        bom_cache = {}
+        
         for product in self:
-            cost, state = product._calculate_manufacturing_cost_recursive()
+            cost, state = product._calculate_manufacturing_cost_recursive(bom_cache=bom_cache)
             product.manufacturing_alt_cost = cost
             product.manufacturing_cost_state = state
 
-    def _calculate_manufacturing_cost_recursive(self, visited_products=None):
+    def _calculate_manufacturing_cost_recursive(self, visited_products=None, bom_cache=None):
         """
         Calculate manufacturing cost recursively for products with BOM
         Returns: (cost, state)
@@ -46,13 +49,20 @@ class ProductProduct(models.Model):
         if visited_products is None:
             visited_products = set()
         
+        # CORRECCIÓN: Usar caché de BOMs para evitar búsquedas repetitivas
+        if bom_cache is None:
+            bom_cache = {}
+        
         # Detectar dependencia circular
         if self.id in visited_products:
             _logger.warning(f"Circular dependency detected for product {self.display_name}")
             return 0.0, 'warning'
         
-        # Obtener BoM principal
-        main_bom = self._get_main_bom()
+        # CORRECCIÓN: Obtener BOM del caché o buscarla una sola vez
+        if self.id not in bom_cache:
+            bom_cache[self.id] = self._get_main_bom()
+        main_bom = bom_cache[self.id]
+        
         if not main_bom:
             return 0.0, 'no_bom'
         
@@ -70,10 +80,19 @@ class ProductProduct(models.Model):
             component = bom_line.product_id
             component_qty = bom_line.product_qty
             
+            # CORRECCIÓN: Verificar y convertir monedas si son diferentes
+            if component.alt_currency_id and self.alt_currency_id and component.alt_currency_id != self.alt_currency_id:
+                # Convertir el costo del componente a la moneda del producto principal
+                conversion_date = fields.Date.today()
+            else:
+                conversion_date = None
+            
             # Si el componente tiene BoM, calcular recursivamente
-            component_bom = component._get_main_bom()
-            if component_bom:
-                component_cost, component_state = component._calculate_manufacturing_cost_recursive(visited_products)
+            if component.id not in bom_cache:
+                bom_cache[component.id] = component._get_main_bom()
+            
+            if bom_cache[component.id]:
+                component_cost, component_state = component._calculate_manufacturing_cost_recursive(visited_products, bom_cache)
                 if component_state != 'ok':
                     has_warning = True
             else:
@@ -84,6 +103,15 @@ class ProductProduct(models.Model):
                     component_cost = 0.0
                     has_warning = True
                     _logger.warning(f"Component {component.display_name} has no alternative cost")
+            
+            # CORRECCIÓN: Convertir moneda si es necesario antes de sumar
+            if conversion_date and component.alt_currency_id and self.alt_currency_id:
+                component_cost = component.alt_currency_id._convert(
+                    component_cost,
+                    self.alt_currency_id,
+                    self.env.company,
+                    conversion_date
+                )
             
             # Sumar al costo total
             total_cost += component_cost * component_qty
@@ -98,19 +126,29 @@ class ProductProduct(models.Model):
         """Get the main active BOM for this product"""
         self.ensure_one()
         
-        # Buscar BoM específica para este producto
-        bom = self.env['mrp.bom'].search([
-            ('product_id', '=', self.id),
+        # CORRECCIÓN: Incluir filtro por empresa para soporte multi-empresa
+        domain = [
             ('active', '=', True),
-        ], limit=1)
+            '|',
+                ('company_id', '=', False),
+                ('company_id', '=', self.env.company.id),
+        ]
+        
+        # Buscar BoM específica para este producto
+        bom = self.env['mrp.bom'].search(
+            domain + [('product_id', '=', self.id)],
+            limit=1
+        )
         
         if not bom:
             # Buscar BoM para el template
-            bom = self.env['mrp.bom'].search([
-                ('product_tmpl_id', '=', self.product_tmpl_id.id),
-                ('product_id', '=', False),
-                ('active', '=', True),
-            ], limit=1)
+            bom = self.env['mrp.bom'].search(
+                domain + [
+                    ('product_tmpl_id', '=', self.product_tmpl_id.id),
+                    ('product_id', '=', False),
+                ],
+                limit=1
+            )
         
         return bom
 
@@ -127,32 +165,43 @@ class ProductProduct(models.Model):
         if not changed_product_ids:
             return
         
-        # Buscar productos que tienen BoM que incluyen los productos modificados
-        dependent_bom_lines = self.env['mrp.bom.line'].search([
-            ('product_id', 'in', changed_product_ids)
-        ])
+        # CORRECCIÓN: Usar conjunto para evitar recálculos duplicados
+        # y BFS (Breadth-First Search) para recorrido eficiente
+        to_recalculate = set()
+        visited = set(changed_product_ids)
+        queue = list(changed_product_ids)
         
-        if not dependent_bom_lines:
-            return
-        
-        # Obtener productos que tienen estas BoMs
-        dependent_boms = dependent_bom_lines.mapped('bom_id')
-        dependent_product_ids = []
-        
-        for bom in dependent_boms:
-            if bom.product_id:
-                dependent_product_ids.append(bom.product_id.id)
-            else:
-                # BoM para template, buscar variantes
-                variant_ids = bom.product_tmpl_id.product_variant_ids.ids
-                dependent_product_ids.extend(variant_ids)
-        
-        if dependent_product_ids:
-            dependent_products = self.browse(dependent_product_ids)
-            dependent_products._compute_manufacturing_alt_cost()
+        while queue:
+            # Procesar en lotes para mejorar rendimiento
+            current_id = queue.pop(0)
             
-            # Recursivamente actualizar dependientes de dependientes
-            self._trigger_manufacturing_cost_recalc_for_dependents(dependent_product_ids)
+            # Buscar productos que tienen BoM que incluyen el producto actual
+            dependent_bom_lines = self.env['mrp.bom.line'].search([
+                ('product_id', '=', current_id)
+            ])
+            
+            if not dependent_bom_lines:
+                continue
+            
+            # Obtener productos que tienen estas BoMs
+            for bom in dependent_bom_lines.mapped('bom_id'):
+                if bom.product_id and bom.product_id.id not in visited:
+                    to_recalculate.add(bom.product_id.id)
+                    visited.add(bom.product_id.id)
+                    queue.append(bom.product_id.id)
+                elif not bom.product_id:
+                    # BoM para template, buscar variantes
+                    for variant in bom.product_tmpl_id.product_variant_ids:
+                        if variant.id not in visited:
+                            to_recalculate.add(variant.id)
+                            visited.add(variant.id)
+                            queue.append(variant.id)
+        
+        # CORRECCIÓN: Recalcular todos los productos afectados en una sola operación
+        if to_recalculate:
+            dependent_products = self.browse(list(to_recalculate))
+            # Usar with_context para pasar información de que es una actualización en cascada
+            dependent_products.with_context(cascade_update=True)._compute_manufacturing_alt_cost()
 
     def write(self, vals):
         """Override write to trigger recalculation when alt_cost changes"""
