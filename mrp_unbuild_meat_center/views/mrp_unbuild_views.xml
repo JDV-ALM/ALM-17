@@ -234,18 +234,6 @@
                         name="ready" 
                         domain="[('state', '=', 'ready')]"/>
             </xpath>
-            <!-- Agregar agrupación por rendimiento -->
-            <xpath expr="//group" position="inside">
-                <filter string="Rendimiento Alto (&gt;90%)" 
-                        name="high_yield" 
-                        domain="[('yield_percentage', '&gt;', 0.9)]"/>
-                <filter string="Rendimiento Medio (70-90%)" 
-                        name="medium_yield" 
-                        domain="[('yield_percentage', '&gt;=', 0.7), ('yield_percentage', '&lt;=', 0.9)]"/>
-                <filter string="Rendimiento Bajo (&lt;70%)" 
-                        name="low_yield" 
-                        domain="[('yield_percentage', '&lt;', 0.7)]"/>
-            </xpath>
         </field>
     </record>
     

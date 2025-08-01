@@ -54,6 +54,7 @@ class MrpUnbuild(models.Model):
     yield_percentage = fields.Float(
         string='Rendimiento (%)',
         compute='_compute_totals',
+        store=True,
         digits=(5, 2),
         help="Porcentaje de producto bueno vs producto inicial"
     )
