@@ -2,6 +2,7 @@
 
 from odoo import api, fields, models, _
 from odoo.exceptions import ValidationError
+from odoo.tools import float_round
 import logging
 
 _logger = logging.getLogger(__name__)
@@ -41,7 +42,7 @@ class ProductPricelistItem(models.Model):
         if self.base != 'manufacturing_alt_cost':
             return super()._compute_base_price(product, quantity, uom, date, currency)
         
-        # Lógica para manufacturing_alt_cost
+        # Validaciones iniciales
         currency.ensure_one()
         
         # Obtener el producto real (product.product) si es template
@@ -63,46 +64,108 @@ class ProductPricelistItem(models.Model):
                 'almus_product_cost_currency.alt_currency_id'
             )
             if param:
-                default_alt_currency_id = int(param)
-                product.alt_currency_id = default_alt_currency_id
+                try:
+                    default_alt_currency_id = int(param)
+                    # Asignar temporalmente para este cálculo (no guardar)
+                    product = product.with_context(temp_alt_currency=default_alt_currency_id)
+                    product.alt_currency_id = default_alt_currency_id
+                except (ValueError, TypeError):
+                    _logger.error(
+                        "Invalid alternative currency parameter: %s",
+                        param
+                    )
+                    raise ValidationError(_(
+                        'Invalid alternative currency configuration. '
+                        'Please check system settings.'
+                    ))
             else:
                 raise ValidationError(_(
-                    'Product %s does not have an alternative currency configured.',
+                    'Product %s does not have an alternative currency configured, '
+                    'and no default alternative currency is set in system settings.',
                     product.display_name
                 ))
         
-        # Determinar qué costo usar
-        if product.has_bom():
-            # Producto manufacturado: usar manufacturing_alt_cost
-            price = product.manufacturing_alt_cost
+        # Determinar qué costo usar basado en si el producto es manufacturado
+        try:
+            if product.has_bom():
+                # Producto manufacturado: usar manufacturing_alt_cost
+                price = product.manufacturing_alt_cost
+                
+                # Solo advertir si el estado no es OK y el costo es 0
+                if product.manufacturing_cost_state != 'ok' and price <= 0:
+                    # Log discreto sin mostrar al usuario
+                    _logger.debug(
+                        'Product %s (ID: %s) has manufacturing cost issues. State: %s',
+                        product.display_name,
+                        product.id,
+                        product.manufacturing_cost_state
+                    )
+            else:
+                # Producto comprado: usar alt_cost como fallback
+                price = product.alt_cost
+                
+                if price <= 0:
+                    _logger.debug(
+                        'Product %s (ID: %s) has no alternative cost defined',
+                        product.display_name,
+                        product.id
+                    )
             
-            # CORRECCIÓN: Eliminar notificación del bus que puede causar spam
-            # Solo registrar en log si hay problemas
-            if product.manufacturing_cost_state != 'ok':
-                _logger.warning(
-                    'Product %s has manufacturing cost calculation issues. State: %s',
-                    product.display_name,
-                    product.manufacturing_cost_state
-                )
-        else:
-            # Producto comprado: usar alt_cost como fallback
-            price = product.alt_cost
+        except Exception as e:
+            _logger.error(
+                "Error determining cost for product %s: %s",
+                product.display_name,
+                str(e),
+                exc_info=True
+            )
+            # Fallback seguro
+            price = 0.0
         
+        # Obtener moneda origen
         src_currency = product.alt_currency_id
         
-        # Si la moneda origen es diferente a la moneda destino, convertir
-        if src_currency != currency:
-            price = src_currency._convert(
-                price, 
-                currency, 
-                self.env.company, 
-                date, 
-                round=False
-            )
+        # Conversión de moneda si es necesario
+        if src_currency and src_currency != currency:
+            try:
+                # Usar el método _convert con manejo de errores
+                price = src_currency._convert(
+                    price, 
+                    currency, 
+                    self.env.company, 
+                    date, 
+                    round=False  # No redondear aquí, se hará después
+                )
+            except Exception as e:
+                _logger.error(
+                    "Currency conversion failed from %s to %s for product %s: %s",
+                    src_currency.name,
+                    currency.name,
+                    product.display_name,
+                    str(e)
+                )
+                # En caso de error, intentar usar tasa directa
+                try:
+                    if src_currency.rate and currency.rate:
+                        price = price * (currency.rate / src_currency.rate)
+                    else:
+                        price = 0.0
+                except:
+                    price = 0.0
         
         # Manejar conversión de UoM si es necesario
         if uom and product.uom_id != uom:
-            price = product.uom_id._compute_price(price, uom)
+            try:
+                price = product.uom_id._compute_price(price, uom)
+            except Exception as e:
+                _logger.error(
+                    "UoM conversion failed for product %s: %s",
+                    product.display_name,
+                    str(e)
+                )
+        
+        # Aplicar redondeo final según la precisión de la moneda destino
+        if currency and hasattr(currency, 'rounding'):
+            price = float_round(price, precision_rounding=currency.rounding)
         
         return price
 
@@ -117,22 +180,60 @@ class ProductPricelistItem(models.Model):
             if not alt_currency_id:
                 return {
                     'warning': {
-                        'title': _('Warning'),
+                        'title': _('Configuration Required'),
                         'message': _(
                             'No alternative currency configured. Please configure it in '
-                            'Settings > Almus Apps > Cost Settings before using this option.'
+                            'Settings > Almus Apps > Cost Settings before using this option.\n\n'
+                            'This option calculates prices based on manufacturing costs '
+                            'in the alternative currency.'
                         )
                     }
                 }
 
     def _is_applicable_for(self, product, qty_in_product_uom):
-        """Override to ensure manufacturing_alt_cost rules work correctly with templates"""
+        """Override to ensure manufacturing_alt_cost rules work correctly"""
         res = super()._is_applicable_for(product, qty_in_product_uom)
         
-        # Si la regla usa manufacturing_alt_cost y el producto es un template con múltiples variantes
-        if res and self.base == 'manufacturing_alt_cost' and product._name == 'product.template':
-            if len(product.product_variant_ids) > 1:
+        if not res:
+            return False
+        
+        # Si la regla usa manufacturing_alt_cost, hacer validaciones adicionales
+        if self.base == 'manufacturing_alt_cost':
+            # Para templates con múltiples variantes
+            if product._name == 'product.template' and len(product.product_variant_ids) > 1:
                 # Esta regla no es aplicable para templates con múltiples variantes
                 return False
+            
+            # Verificar que el producto tenga configuración válida
+            # (pero no lanzar excepción aquí, solo retornar False)
+            if product._name == 'product.product':
+                if not product.alt_currency_id:
+                    # Verificar si hay moneda por defecto
+                    param = self.env['ir.config_parameter'].sudo().get_param(
+                        'almus_product_cost_currency.alt_currency_id'
+                    )
+                    if not param:
+                        return False
         
         return res
+
+    @api.model
+    def _get_pricelist_items_for_product(self, product, quantity, uom, date, currency):
+        """
+        Método helper para obtener items de lista de precios aplicables
+        con caché mejorado (si se implementa en el futuro)
+        """
+        # Este método puede ser extendido en el futuro para implementar
+        # caché de reglas de lista de precios si es necesario
+        items = self.search([
+            ('product_id', '=', product.id),
+            '|', ('date_start', '=', False), ('date_start', '<=', date),
+            '|', ('date_end', '=', False), ('date_end', '>=', date),
+        ])
+        
+        # Filtrar por cantidad mínima
+        items = items.filtered(
+            lambda r: r.min_quantity <= quantity
+        )
+        
+        return items.sorted('min_quantity', reverse=True)

@@ -6,338 +6,87 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Odoo Server 17.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-01-30 00:00:00\n"
-"PO-Revision-Date: 2025-01-30 00:00:00\n"
+"POT-Creation-Date: 2024-01-01 00:00:00\n"
+"PO-Revision-Date: 2024-01-01 00:00:00\n"
 "Last-Translator: \n"
 "Language-Team: \n"
-"Language: es_VE\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: \n"
-"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"Plural-Forms: \n"
 
 #. module: almus_product_cost_currency
-#: model:ir.model,name:almus_product_cost_currency.model_product_product
-msgid "Product"
-msgstr "Producto"
+#: model:ir.model.fields,field_description:almus_product_cost_currency.field_product_product__cost_currency_id
+#: model:ir.model.fields,field_description:almus_product_cost_currency.field_product_template__cost_currency_id
+msgid "Cost Currency"
+msgstr "Moneda de Costo"
 
 #. module: almus_product_cost_currency
-#: model:ir.model,name:almus_product_cost_currency.model_product_template
-msgid "Product Template"
-msgstr "Plantilla de producto"
+#: model:ir.model.fields,field_description:almus_product_cost_currency.field_product_product__cost_in_currency
+#: model:ir.model.fields,field_description:almus_product_cost_currency.field_product_template__cost_in_currency
+msgid "Cost in Currency"
+msgstr "Costo en Moneda"
 
 #. module: almus_product_cost_currency
-#: model:ir.model,name:almus_product_cost_currency.model_product_pricelist_item
-msgid "Pricelist Item"
-msgstr "Elemento de lista de precios"
+#: model:ir.model.fields,field_description:almus_product_cost_currency.field_res_config_settings__product_cost_currency_id
+msgid "Product Cost Currency"
+msgstr "Moneda de Costo de Producto"
 
 #. module: almus_product_cost_currency
-#: model:ir.model,name:almus_product_cost_currency.model_res_config_settings
-msgid "Config Settings"
-msgstr "Ajustes de configuración"
+#: model:ir.model.fields,help:almus_product_cost_currency.field_product_product__cost_currency_id
+#: model:ir.model.fields,help:almus_product_cost_currency.field_product_template__cost_currency_id
+msgid "Currency used to display alternative cost"
+msgstr "Moneda utilizada para mostrar el costo alternativo"
 
 #. module: almus_product_cost_currency
-#: model:ir.model,name:almus_product_cost_currency.model_almus_cost_recalculation_wizard
-msgid "Alternative Cost Recalculation Wizard"
-msgstr "Asistente de recálculo de costo alternativo"
+#: model:ir.model.fields,help:almus_product_cost_currency.field_product_product__cost_in_currency
+#: model:ir.model.fields,help:almus_product_cost_currency.field_product_template__cost_in_currency
+msgid "Product cost converted to the selected currency"
+msgstr "Costo del producto convertido a la moneda seleccionada"
 
 #. module: almus_product_cost_currency
-#: model:ir.model.fields,field_description:almus_product_cost_currency.field_product_product__alt_currency_id
-#: model:ir.model.fields,field_description:almus_product_cost_currency.field_product_template__alt_currency_id
-msgid "Alternative Currency"
-msgstr "Moneda alternativa"
-
-#. module: almus_product_cost_currency
-#: model:ir.model.fields,field_description:almus_product_cost_currency.field_product_product__alt_cost
-#: model:ir.model.fields,field_description:almus_product_cost_currency.field_product_template__alt_cost
-msgid "Cost in Alt. Currency"
-msgstr "Costo en moneda alt."
-
-#. module: almus_product_cost_currency
-#: model:ir.model.fields,field_description:almus_product_cost_currency.field_res_config_settings__product_alt_currency_id
-msgid "Product Alternative Currency"
-msgstr "Moneda alternativa de producto"
-
-#. module: almus_product_cost_currency
-#: model:ir.model.fields,field_description:almus_product_cost_currency.field_res_config_settings__alt_currency_last_update
-msgid "Last Currency Update"
-msgstr "Última actualización de moneda"
-
-#. module: almus_product_cost_currency
-#: model:ir.model.fields,field_description:almus_product_cost_currency.field_almus_cost_recalculation_wizard__products_count
-msgid "Products to Update"
-msgstr "Productos a actualizar"
-
-#. module: almus_product_cost_currency
-#: model:ir.model.fields,field_description:almus_product_cost_currency.field_almus_cost_recalculation_wizard__currency_id
-msgid "Currency"
-msgstr "Moneda"
-
-#. module: almus_product_cost_currency
-#: model:ir.model.fields,help:almus_product_cost_currency.field_product_product__alt_currency_id
-msgid "Alternative currency used to display cost"
-msgstr "Moneda alternativa utilizada para mostrar el costo"
-
-#. module: almus_product_cost_currency
-#: model:ir.model.fields,help:almus_product_cost_currency.field_product_template__alt_currency_id
-msgid "Alternative currency used to display cost (from variant)"
-msgstr "Moneda alternativa utilizada para mostrar el costo (desde variante)"
-
-#. module: almus_product_cost_currency
-#: model:ir.model.fields,help:almus_product_cost_currency.field_product_product__alt_cost
-msgid "Product cost converted to the alternative currency"
-msgstr "Costo del producto convertido a la moneda alternativa"
-
-#. module: almus_product_cost_currency
-#: model:ir.model.fields,help:almus_product_cost_currency.field_product_template__alt_cost
-msgid "Product cost converted to the alternative currency (from variant)"
-msgstr "Costo del producto convertido a la moneda alternativa (desde variante)"
-
-#. module: almus_product_cost_currency
-#: model:ir.model.fields,help:almus_product_cost_currency.field_res_config_settings__product_alt_currency_id
+#: model:ir.model.fields,help:almus_product_cost_currency.field_res_config_settings__product_cost_currency_id
 msgid "Default currency to display product costs in alternative currency"
 msgstr "Moneda predeterminada para mostrar los costos de productos en moneda alternativa"
 
 #. module: almus_product_cost_currency
-#: model:ir.model.fields,help:almus_product_cost_currency.field_res_config_settings__alt_currency_last_update
-msgid "Information about the last alternative currency update"
-msgstr "Información sobre la última actualización de moneda alternativa"
-
-#. module: almus_product_cost_currency
-#: model:ir.model.fields,help:almus_product_cost_currency.field_almus_cost_recalculation_wizard__products_count
-msgid "Number of products that will be updated"
-msgstr "Número de productos que serán actualizados"
-
-#. module: almus_product_cost_currency
-#: model:ir.model.fields,help:almus_product_cost_currency.field_almus_cost_recalculation_wizard__currency_id
-msgid "Alternative currency to use for recalculation"
-msgstr "Moneda alternativa a utilizar para el recálculo"
-
-#. module: almus_product_cost_currency
-#: model:ir.model.fields,field_description:almus_product_cost_currency.field_product_template__show_alt_cost
-msgid "Show Alt Cost"
-msgstr "Mostrar costo alt."
-
-#. module: almus_product_cost_currency
-#: model:ir.model.fields,help:almus_product_cost_currency.field_product_template__show_alt_cost
-msgid "Technical field to know if alternative cost should be displayed"
-msgstr "Campo técnico para saber si el costo alternativo debe mostrarse"
+#: model_terms:ir.ui.view,arch_db:almus_product_cost_currency.res_config_settings_view_form_almus_cost_currency
+msgid "Alternative Cost Currency"
+msgstr "Moneda Alternativa de Costo"
 
 #. module: almus_product_cost_currency
 #: model_terms:ir.ui.view,arch_db:almus_product_cost_currency.res_config_settings_view_form_almus_cost_currency
-msgid "Configuración de Costos"
-msgstr "Configuración de costos"
+msgid "Almus Cost Settings"
+msgstr "Configuración de Costos Almus"
 
 #. module: almus_product_cost_currency
 #: model_terms:ir.ui.view,arch_db:almus_product_cost_currency.res_config_settings_view_form_almus_cost_currency
-msgid "Moneda de Costo Alternativa"
-msgstr "Moneda de costo alternativa"
+msgid "Set the default currency to display product costs in addition to company currency"
+msgstr "Establecer la moneda predeterminada para mostrar los costos de productos además de la moneda de la compañía"
 
 #. module: almus_product_cost_currency
 #: model_terms:ir.ui.view,arch_db:almus_product_cost_currency.res_config_settings_view_form_almus_cost_currency
-msgid "Establece la moneda predeterminada para mostrar los costos de productos además de la moneda de la compañía"
-msgstr "Establece la moneda predeterminada para mostrar los costos de productos además de la moneda de la compañía"
-
-#. module: almus_product_cost_currency
-#: model_terms:ir.ui.view,arch_db:almus_product_cost_currency.res_config_settings_view_form_almus_cost_currency
-msgid "Esta moneda se utilizará para mostrar un campo de costo adicional en los productos."
+msgid "This currency will be used to display an additional cost field in products."
 msgstr "Esta moneda se utilizará para mostrar un campo de costo adicional en los productos."
 
 #. module: almus_product_cost_currency
 #: model_terms:ir.ui.view,arch_db:almus_product_cost_currency.res_config_settings_view_form_almus_cost_currency
-msgid "El costo se convertirá automáticamente desde la moneda de la compañía."
+msgid "The cost will be automatically converted from the company currency."
 msgstr "El costo se convertirá automáticamente desde la moneda de la compañía."
 
 #. module: almus_product_cost_currency
-#: model_terms:ir.ui.view,arch_db:almus_product_cost_currency.res_config_settings_view_form_almus_cost_currency
-msgid "Recalcular Costos Alternativos"
-msgstr "Recalcular costos alternativos"
-
-#. module: almus_product_cost_currency
-#: model_terms:ir.ui.view,arch_db:almus_product_cost_currency.res_config_settings_view_form_almus_cost_currency
-msgid "Ver Productos"
-msgstr "Ver productos"
-
-#. module: almus_product_cost_currency
-#: model_terms:ir.ui.view,arch_db:almus_product_cost_currency.res_config_settings_view_form_almus_cost_currency
-msgid "Nota:"
-msgstr "Nota:"
-
-#. module: almus_product_cost_currency
-#: model_terms:ir.ui.view,arch_db:almus_product_cost_currency.res_config_settings_view_form_almus_cost_currency
-msgid "El recálculo masivo puede tomar tiempo si tiene muchos productos."
-msgstr "El recálculo masivo puede tomar tiempo si tiene muchos productos."
-
-#. module: almus_product_cost_currency
 #: model_terms:ir.ui.view,arch_db:almus_product_cost_currency.product_product_tree_view_cost_currency
-#: model_terms:ir.ui.view,arch_db:almus_product_cost_currency.product_template_tree_view_cost_currency
 msgid "Cost (Alt. Currency)"
-msgstr "Costo (moneda alt.)"
-
-#. module: almus_product_cost_currency
-#: model_terms:ir.ui.view,arch_db:almus_product_cost_currency.product_product_search_view_cost_currency
-msgid "With Alternative Cost"
-msgstr "Con costo alternativo"
-
-#. module: almus_product_cost_currency
-#: model_terms:ir.ui.view,arch_db:almus_product_cost_currency.product_product_search_view_cost_currency
-msgid "Without Alternative Cost"
-msgstr "Sin costo alternativo"
-
-#. module: almus_product_cost_currency
-#: model_terms:ir.ui.view,arch_db:almus_product_cost_currency.product_product_search_view_cost_currency
-msgid "Alternative Currency"
-msgstr "Moneda alternativa"
-
-#. module: almus_product_cost_currency
-#: model:ir.actions.act_window,name:almus_product_cost_currency.action_view_products_alt_currency
-msgid "Products with Alternative Currency"
-msgstr "Productos con moneda alternativa"
-
-#. module: almus_product_cost_currency
-#: model_terms:ir.ui.view,arch_db:almus_product_cost_currency.view_almus_cost_recalculation_wizard
-msgid "Confirm Cost Recalculation"
-msgstr "Confirmar recálculo de costos"
-
-#. module: almus_product_cost_currency
-#: model_terms:ir.ui.view,arch_db:almus_product_cost_currency.view_almus_cost_recalculation_wizard
-msgid "Large Dataset Warning"
-msgstr "Advertencia de conjunto de datos grande"
-
-#. module: almus_product_cost_currency
-#: model_terms:ir.ui.view,arch_db:almus_product_cost_currency.view_almus_cost_recalculation_wizard
-msgid "You are about to recalculate alternative costs for"
-msgstr "Está a punto de recalcular los costos alternativos para"
-
-#. module: almus_product_cost_currency
-#: model_terms:ir.ui.view,arch_db:almus_product_cost_currency.view_almus_cost_recalculation_wizard
-msgid "products."
-msgstr "productos."
-
-#. module: almus_product_cost_currency
-#: model_terms:ir.ui.view,arch_db:almus_product_cost_currency.view_almus_cost_recalculation_wizard
-msgid "This operation may take several minutes. The system will process products in batches to avoid performance issues."
-msgstr "Esta operación puede tomar varios minutos. El sistema procesará los productos en lotes para evitar problemas de rendimiento."
-
-#. module: almus_product_cost_currency
-#: model_terms:ir.ui.view,arch_db:almus_product_cost_currency.view_almus_cost_recalculation_wizard
-msgid "Confirm Recalculation"
-msgstr "Confirmar recálculo"
-
-#. module: almus_product_cost_currency
-#: model_terms:ir.ui.view,arch_db:almus_product_cost_currency.view_almus_cost_recalculation_wizard
-msgid "Cancel"
-msgstr "Cancelar"
-
-#. module: almus_product_cost_currency
-#: selection:product.pricelist.item,base:0
-msgid "Alternative Cost"
-msgstr "Costo alternativo"
-
-#. module: almus_product_cost_currency
-#: model_terms:ir.ui.view,arch_db:almus_product_cost_currency.product_pricelist_item_form_view_alt_cost
-msgid "Alternative Cost Information"
-msgstr "Información de costo alternativo"
-
-#. module: almus_product_cost_currency
-#: model_terms:ir.ui.view,arch_db:almus_product_cost_currency.product_pricelist_item_form_view_alt_cost
-msgid "The price will be calculated based on the product's alternative cost."
-msgstr "El precio se calculará basado en el costo alternativo del producto."
-
-#. module: almus_product_cost_currency
-#: model_terms:ir.ui.view,arch_db:almus_product_cost_currency.product_pricelist_item_form_view_alt_cost
-msgid "Make sure the alternative currency is configured in Settings."
-msgstr "Asegúrese de que la moneda alternativa esté configurada en Ajustes."
-
-#. module: almus_product_cost_currency
-#: model_terms:ir.ui.view,arch_db:almus_product_cost_currency.product_pricelist_item_search_alt_cost
-msgid "Based on Alt. Cost"
-msgstr "Basado en costo alt."
-
-#. module: almus_product_cost_currency
-#: model_terms:ir.ui.view,arch_db:almus_product_cost_currency.product_pricelist_item_search_alt_cost
-msgid "Base"
-msgstr "Base"
-
-#. module: almus_product_cost_currency
-#: code:addons/almus_product_cost_currency/models/product_pricelist_item.py:0
-#, python-format
-msgid "You must configure an alternative currency in settings before using Alternative Cost as base for pricelist rules."
-msgstr "Debe configurar una moneda alternativa en ajustes antes de usar Costo Alternativo como base para reglas de lista de precios."
-
-#. module: almus_product_cost_currency
-#: code:addons/almus_product_cost_currency/models/product_pricelist_item.py:0
-#, python-format
-msgid "Cannot use Alternative Cost for product templates with multiple variants. Please create specific rules for each variant."
-msgstr "No se puede usar Costo Alternativo para plantillas de producto con múltiples variantes. Por favor cree reglas específicas para cada variante."
-
-#. module: almus_product_cost_currency
-#: code:addons/almus_product_cost_currency/models/product_pricelist_item.py:0
-#, python-format
-msgid "Product %s does not have an alternative currency configured."
-msgstr "El producto %s no tiene una moneda alternativa configurada."
-
-#. module: almus_product_cost_currency
-#: code:addons/almus_product_cost_currency/models/product_pricelist_item.py:0
-#, python-format
-msgid "Warning"
-msgstr "Advertencia"
-
-#. module: almus_product_cost_currency
-#: code:addons/almus_product_cost_currency/models/product_pricelist_item.py:0
-#, python-format
-msgid "No alternative currency configured. Please configure it in Settings > Almus Apps > Cost Settings before using this option."
-msgstr "No hay moneda alternativa configurada. Por favor configúrela en Ajustes > Aplicaciones Almus > Configuración de costos antes de usar esta opción."
+msgstr "Costo (Moneda Alt.)"
 
 #. module: almus_product_cost_currency
 #: code:addons/almus_product_cost_currency/models/res_config_settings.py:0
 #, python-format
-msgid "%(count)s products are using %(currency)s as alternative currency"
-msgstr "%(count)s productos están usando %(currency)s como moneda alternativa"
+msgid "Currency Change"
+msgstr "Cambio de Moneda"
 
 #. module: almus_product_cost_currency
 #: code:addons/almus_product_cost_currency/models/res_config_settings.py:0
 #, python-format
-msgid "No alternative currency configured"
-msgstr "No hay moneda alternativa configurada"
-
-#. module: almus_product_cost_currency
-#: code:addons/almus_product_cost_currency/models/res_config_settings.py:0
-#, python-format
-msgid "Please configure an alternative currency first."
-msgstr "Por favor configure primero una moneda alternativa."
-
-#. module: almus_product_cost_currency
-#: code:addons/almus_product_cost_currency/models/res_config_settings.py:0
-#, python-format
-msgid "You need Stock Manager rights to recalculate costs."
-msgstr "Necesita permisos de Gestor de inventario para recalcular costos."
-
-#. module: almus_product_cost_currency
-#: code:addons/almus_product_cost_currency/models/res_config_settings.py:0
-#, python-format
-msgid "No products found with alternative currency configured."
-msgstr "No se encontraron productos con moneda alternativa configurada."
-
-#. module: almus_product_cost_currency
-#: code:addons/almus_product_cost_currency/models/res_config_settings.py:0
-#: code:addons/almus_product_cost_currency/wizard/cost_recalculation_wizard.py:0
-#, python-format
-msgid "Success"
-msgstr "Éxito"
-
-#. module: almus_product_cost_currency
-#: code:addons/almus_product_cost_currency/wizard/cost_recalculation_wizard.py:0
-#, python-format
-msgid "Alternative costs have been recalculated for %s products."
-msgstr "Los costos alternativos han sido recalculados para %s productos."
-
-#. module: almus_product_cost_currency
-#: model:ir.model.fields,field_description:almus_product_cost_currency.field_product_product__standard_price
-msgid "Cost"
-msgstr "Costo"
-
-#. module: almus_product_cost_currency
-#: model:ir.model.fields,help:almus_product_cost_currency.field_product_product__standard_price
-msgid "Value of the product (automatically computed in AVCO)."
-msgstr "Valor del producto (calculado automáticamente en AVCO)."
+msgid "Changing the cost currency will update all existing products. This may take some time for large databases."
+msgstr "Cambiar la moneda de costo actualizará todos los productos existentes. Esto puede tomar tiempo en bases de datos grandes."
