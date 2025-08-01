@@ -154,6 +154,7 @@ class MrpUnbuild(models.Model):
                     'expected_qty': expected_qty,
                     'actual_qty': expected_qty,  # Inicializar con valor esperado
                     'product_uom_id': byproduct.product_uom_id.id,
+                    'value_factor_bom': byproduct.value_factor if hasattr(byproduct, 'value_factor') else 1.0,
                     'value_factor': byproduct.value_factor if hasattr(byproduct, 'value_factor') else 1.0,
                     'is_waste': False,
                 })
@@ -168,6 +169,7 @@ class MrpUnbuild(models.Model):
                     'expected_qty': line_data['qty'],
                     'actual_qty': line_data['qty'],
                     'product_uom_id': bom_line.product_uom_id.id,
+                    'value_factor_bom': 1.0,  # Valor por defecto si no hay byproducts
                     'value_factor': 1.0,  # Valor por defecto si no hay byproducts
                     'is_waste': False,
                 })

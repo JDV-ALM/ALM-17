@@ -69,7 +69,7 @@
                                   editable="bottom"
                                   decoration-muted="is_waste"
                                   decoration-bf="not is_waste"
-                                  decoration-warning="use_manual_cost">
+                                  decoration-warning="value_factor != value_factor_bom">
                                 <field name="sequence" widget="handle"/>
                                 <field name="product_id" 
                                        options="{'no_create': True}"
@@ -90,9 +90,14 @@
                                        groups="uom.group_uom"
                                        domain="[('category_id', '=', product_uom_category_id)]"
                                        options="{'no_create': True}"/>
+                                <field name="value_factor_bom" 
+                                       optional="hide"
+                                       readonly="1"
+                                       help="Factor de valor original de la BoM"/>
                                 <field name="value_factor" 
                                        optional="show"
-                                       help="Factor de valor del producto (1.0 = estándar)"/>
+                                       decoration-warning="value_factor != value_factor_bom"
+                                       help="Factor de valor del producto. Puede ajustarse para este desmantelamiento"/>
                                 <field name="relative_value" 
                                        optional="hide"
                                        readonly="1"
@@ -107,16 +112,7 @@
                                 <field name="cost_share" 
                                        widget="percentage" 
                                        optional="show"
-                                       readonly="not use_manual_cost"/>
-                                <field name="use_manual_cost" 
-                                       string="Manual" 
-                                       optional="show"
-                                       help="Activar para distribución manual de costos"/>
-                                <field name="cost_share_manual" 
-                                       widget="percentage"
-                                       optional="show"
-                                       invisible="not use_manual_cost"
-                                       string="% Manual"/>
+                                       readonly="1"/>
                                 <field name="company_id" column_invisible="True"/>
                             </tree>
                             
@@ -170,9 +166,9 @@
                                 </h4>
                                 <ul class="mb-0">
                                     <li>Ajuste las <b>cantidades reales</b> obtenidas del desmantelamiento</li>
-                                    <li>El <b>factor de valor</b> determina el valor relativo de cada corte (ej: lomito = 10x, hueso = 0.5x)</li>
+                                    <li>El <b>factor de valor</b> viene de la lista de materiales pero puede ajustarse si es necesario</li>
                                     <li>Los productos marcados como <b>desecho</b> no recibirán costo y serán enviados a la ubicación de desecho</li>
-                                    <li>Active <b>distribución manual</b> si necesita ajustar los porcentajes de costo manualmente</li>
+                                    <li>La <b>distribución de costo</b> se calcula automáticamente basada en cantidad × factor de valor</li>
                                 </ul>
                             </div>
                             
@@ -256,29 +252,17 @@
         </field>
     </record>
     
-    <!-- Vista de formulario para mrp.bom.byproduct con factor de valor -->
-    <record id="mrp_bom_byproduct_form_view_value_factor" model="ir.ui.view">
-        <field name="name">mrp.bom.byproduct.form.value.factor</field>
-        <field name="model">mrp.bom.byproduct</field>
-        <field name="inherit_id" ref="mrp.mrp_bom_byproduct_form_view"/>
+    <!-- Vista de formulario para mrp.bom con factor de valor en byproducts -->
+    <record id="mrp_bom_form_view_value_factor" model="ir.ui.view">
+        <field name="name">mrp.bom.form.value.factor</field>
+        <field name="model">mrp.bom</field>
+        <field name="inherit_id" ref="mrp.mrp_bom_form_view"/>
         <field name="arch" type="xml">
-            <!-- Agregar campo de factor de valor después de la cantidad -->
-            <xpath expr="//field[@name='product_qty']" position="after">
+            <!-- Agregar columna en la pestaña de subproductos -->
+            <xpath expr="//field[@name='byproduct_ids']/tree/field[@name='product_qty']" position="after">
                 <field name="value_factor" 
+                       optional="show"
                        help="Factor multiplicador para distribución de costos en desmantelamiento. &#10;Ejemplos: &#10;- Cortes premium (lomito): 10.0 &#10;- Cortes estándar: 1.0 &#10;- Cortes económicos (hueso): 0.5"/>
-            </xpath>
-        </field>
-    </record>
-    
-    <!-- Vista de árbol para mrp.bom.byproduct con factor de valor -->
-    <record id="mrp_bom_byproduct_tree_view_value_factor" model="ir.ui.view">
-        <field name="name">mrp.bom.byproduct.tree.value.factor</field>
-        <field name="model">mrp.bom.byproduct</field>
-        <field name="inherit_id" ref="mrp.mrp_bom_byproduct_tree_view"/>
-        <field name="arch" type="xml">
-            <!-- Agregar columna de factor de valor -->
-            <xpath expr="//field[@name='product_qty']" position="after">
-                <field name="value_factor" optional="show"/>
             </xpath>
         </field>
     </record>
