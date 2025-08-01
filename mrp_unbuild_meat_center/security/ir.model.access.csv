@@ -1,4 +1,3 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
 access_mrp_unbuild_line_user,mrp.unbuild.line user,model_mrp_unbuild_line,mrp.group_mrp_user,1,1,1,1
-access_mrp_unbuild_line_manager,mrp.unbuild.line manager,model_mrp_unbuild_line,mrp.group_mrp_manager,1,1,1,1
-access_mrp_unbuild_line_readonly,mrp.unbuild.line readonly,model_mrp_unbuild_line,base.group_user,1,0,0,0
+access_mrp_unbuild_line_viewer,mrp.unbuild.line viewer,model_mrp_unbuild_line,base.group_user,1,0,0,0

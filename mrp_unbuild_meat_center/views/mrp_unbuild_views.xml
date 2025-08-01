@@ -41,10 +41,16 @@
                 <!-- Campo auxiliar invisible -->
                 <field name="show_unbuild_lines" invisible="1"/>
                 
+                <!-- Mostrar advertencia de cantidad si existe -->
+                <div class="alert alert-warning" role="alert" invisible="not qty_warning">
+                    <field name="qty_warning" nolabel="1"/>
+                </div>
+                
                 <!-- Mostrar totales cuando hay líneas -->
                 <group invisible="not show_unbuild_lines" string="Resumen">
                     <group>
                         <field name="total_expected_qty" widget="float" digits="[16,3]"/>
+                        <field name="total_actual_qty" widget="float" digits="[16,3]"/>
                     </group>
                     <group>
                         <field name="total_waste_qty" widget="float" digits="[16,3]"/>
@@ -62,7 +68,8 @@
                             <tree string="Líneas de Desmantelamiento" 
                                   editable="bottom"
                                   decoration-muted="is_waste"
-                                  decoration-bf="not is_waste">
+                                  decoration-bf="not is_waste"
+                                  decoration-warning="use_manual_cost">
                                 <field name="sequence" widget="handle"/>
                                 <field name="product_id" 
                                        options="{'no_create': True}"
@@ -83,6 +90,13 @@
                                        groups="uom.group_uom"
                                        domain="[('category_id', '=', product_uom_category_id)]"
                                        options="{'no_create': True}"/>
+                                <field name="value_factor" 
+                                       optional="show"
+                                       help="Factor de valor del producto (1.0 = estándar)"/>
+                                <field name="relative_value" 
+                                       optional="hide"
+                                       readonly="1"
+                                       help="Cantidad × Factor de Valor"/>
                                 <field name="lot_id" 
                                        groups="stock.group_production_lot"
                                        domain="[('product_id', '=', product_id), ('company_id', '=', parent.company_id)]"
@@ -93,7 +107,16 @@
                                 <field name="cost_share" 
                                        widget="percentage" 
                                        optional="show"
-                                       readonly="1"/>
+                                       readonly="not use_manual_cost"/>
+                                <field name="use_manual_cost" 
+                                       string="Manual" 
+                                       optional="show"
+                                       help="Activar para distribución manual de costos"/>
+                                <field name="cost_share_manual" 
+                                       widget="percentage"
+                                       optional="show"
+                                       invisible="not use_manual_cost"
+                                       string="% Manual"/>
                                 <field name="company_id" column_invisible="True"/>
                             </tree>
                             
@@ -104,6 +127,7 @@
                                 <field name="product_uom_id"/>
                                 <field name="is_waste"/>
                                 <field name="cost_share"/>
+                                <field name="value_factor"/>
                                 <templates>
                                     <t t-name="kanban-box">
                                         <div t-attf-class="oe_kanban_card oe_kanban_global_click">
@@ -120,6 +144,10 @@
                                                     <field name="actual_qty"/> 
                                                     <field name="product_uom_id"/>
                                                 </div>
+                                                <div t-if="record.value_factor.raw_value != 1.0">
+                                                    <strong>Factor Valor: </strong>
+                                                    <field name="value_factor"/>x
+                                                </div>
                                                 <div t-if="record.is_waste.raw_value" class="text-danger">
                                                     <i class="fa fa-trash"/> Desecho
                                                 </div>
@@ -134,20 +162,27 @@
                             </kanban>
                         </field>
                         
-                        <!-- Nota informativa -->
-                        <div class="alert alert-info" role="alert" invisible="state != 'ready'">
-                            <p class="mb-0">
-                                <i class="fa fa-info-circle"/> Ajuste las cantidades reales obtenidas del desmantelamiento.
-                                Los productos marcados como desecho no recibirán costo y serán enviados a la ubicación de desecho.
-                            </p>
-                        </div>
-                        
-                        <!-- Mensaje cuando no hay líneas -->
-                        <div class="alert alert-warning" role="alert" invisible="unbuild_line_ids or not bom_id">
-                            <p class="mb-0">
-                                <i class="fa fa-warning"/> Haga clic en "Preparar Desmantelamiento" para generar las líneas de productos basadas en la lista de materiales.
-                            </p>
-                        </div>
+                        <!-- Notas informativas -->
+                        <group col="1">
+                            <div class="alert alert-info" role="alert" invisible="state != 'ready'">
+                                <h4 class="alert-heading">
+                                    <i class="fa fa-info-circle"/> Instrucciones
+                                </h4>
+                                <ul class="mb-0">
+                                    <li>Ajuste las <b>cantidades reales</b> obtenidas del desmantelamiento</li>
+                                    <li>El <b>factor de valor</b> determina el valor relativo de cada corte (ej: lomito = 10x, hueso = 0.5x)</li>
+                                    <li>Los productos marcados como <b>desecho</b> no recibirán costo y serán enviados a la ubicación de desecho</li>
+                                    <li>Active <b>distribución manual</b> si necesita ajustar los porcentajes de costo manualmente</li>
+                                </ul>
+                            </div>
+                            
+                            <!-- Mensaje cuando no hay líneas -->
+                            <div class="alert alert-warning" role="alert" invisible="unbuild_line_ids or not bom_id">
+                                <p class="mb-0">
+                                    <i class="fa fa-warning"/> Haga clic en "Preparar Desmantelamiento" para generar las líneas de productos basadas en la lista de materiales.
+                                </p>
+                            </div>
+                        </group>
                     </page>
                     
                     <!-- Página de información adicional -->
@@ -174,8 +209,11 @@
         <field name="model">mrp.unbuild</field>
         <field name="inherit_id" ref="mrp.mrp_unbuild_tree_view"/>
         <field name="arch" type="xml">
-            <!-- Agregar estado en la vista de árbol -->
+            <!-- Agregar estado y rendimiento en la vista de árbol -->
             <xpath expr="//field[@name='product_qty']" position="after">
+                <field name="yield_percentage" 
+                       widget="percentage"
+                       optional="show"/>
                 <field name="state" 
                        decoration-info="state == 'ready'"
                        decoration-success="state == 'done'"
@@ -196,6 +234,18 @@
                         name="ready" 
                         domain="[('state', '=', 'ready')]"/>
             </xpath>
+            <!-- Agregar agrupación por rendimiento -->
+            <xpath expr="//group" position="inside">
+                <filter string="Rendimiento Alto (&gt;90%)" 
+                        name="high_yield" 
+                        domain="[('yield_percentage', '&gt;', 0.9)]"/>
+                <filter string="Rendimiento Medio (70-90%)" 
+                        name="medium_yield" 
+                        domain="[('yield_percentage', '&gt;=', 0.7), ('yield_percentage', '&lt;=', 0.9)]"/>
+                <filter string="Rendimiento Bajo (&lt;70%)" 
+                        name="low_yield" 
+                        domain="[('yield_percentage', '&lt;', 0.7)]"/>
+            </xpath>
         </field>
     </record>
     
@@ -210,6 +260,37 @@
                 <div t-if="record.state.raw_value == 'ready'" class="text-info mt-2">
                     <i class="fa fa-clock-o"/> Listo para Procesar
                 </div>
+                <div t-if="record.yield_percentage.raw_value" class="mt-2">
+                    <strong>Rendimiento: </strong>
+                    <field name="yield_percentage" widget="percentage"/>
+                </div>
+            </xpath>
+        </field>
+    </record>
+    
+    <!-- Vista de formulario para mrp.bom.byproduct con factor de valor -->
+    <record id="mrp_bom_byproduct_form_view_value_factor" model="ir.ui.view">
+        <field name="name">mrp.bom.byproduct.form.value.factor</field>
+        <field name="model">mrp.bom.byproduct</field>
+        <field name="inherit_id" ref="mrp.mrp_bom_byproduct_form_view"/>
+        <field name="arch" type="xml">
+            <!-- Agregar campo de factor de valor después de la cantidad -->
+            <xpath expr="//field[@name='product_qty']" position="after">
+                <field name="value_factor" 
+                       help="Factor multiplicador para distribución de costos en desmantelamiento. &#10;Ejemplos: &#10;- Cortes premium (lomito): 10.0 &#10;- Cortes estándar: 1.0 &#10;- Cortes económicos (hueso): 0.5"/>
+            </xpath>
+        </field>
+    </record>
+    
+    <!-- Vista de árbol para mrp.bom.byproduct con factor de valor -->
+    <record id="mrp_bom_byproduct_tree_view_value_factor" model="ir.ui.view">
+        <field name="name">mrp.bom.byproduct.tree.value.factor</field>
+        <field name="model">mrp.bom.byproduct</field>
+        <field name="inherit_id" ref="mrp.mrp_bom_byproduct_tree_view"/>
+        <field name="arch" type="xml">
+            <!-- Agregar columna de factor de valor -->
+            <xpath expr="//field[@name='product_qty']" position="after">
+                <field name="value_factor" optional="show"/>
             </xpath>
         </field>
     </record>

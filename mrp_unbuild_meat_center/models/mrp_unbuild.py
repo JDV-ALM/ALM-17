@@ -58,13 +58,20 @@ class MrpUnbuild(models.Model):
         help="Porcentaje de producto bueno vs producto inicial"
     )
     
+    # Nuevo campo para advertencia de exceso
+    qty_warning = fields.Char(
+        string='Advertencia de Cantidad',
+        compute='_compute_qty_warning'
+    )
+    
     @api.depends('state', 'bom_id')
     def _compute_show_unbuild_lines(self):
         """Determina cuándo mostrar las líneas editables"""
         for unbuild in self:
             unbuild.show_unbuild_lines = unbuild.state in ('ready', 'done')
     
-    @api.depends('unbuild_line_ids.expected_qty', 'unbuild_line_ids.actual_qty', 'unbuild_line_ids.is_waste')
+    @api.depends('unbuild_line_ids.expected_qty', 'unbuild_line_ids.actual_qty', 
+                 'unbuild_line_ids.is_waste', 'product_qty', 'product_uom_id')
     def _compute_totals(self):
         """Calcula totales y rendimiento"""
         for unbuild in self:
@@ -76,10 +83,34 @@ class MrpUnbuild(models.Model):
             # Calcular rendimiento (productos buenos / cantidad inicial)
             if unbuild.product_qty > 0:
                 good_qty = unbuild.total_actual_qty - unbuild.total_waste_qty
-                # Almacenar como decimal (0.8 para 80%, 1.0 para 100%)
                 unbuild.yield_percentage = good_qty / unbuild.product_qty
             else:
                 unbuild.yield_percentage = 0.0
+    
+    @api.depends('unbuild_line_ids.actual_qty', 'product_qty', 'product_uom_id')
+    def _compute_qty_warning(self):
+        """Calcula advertencia si la suma excede la cantidad inicial"""
+        for unbuild in self:
+            if not unbuild.unbuild_line_ids:
+                unbuild.qty_warning = False
+                continue
+                
+            # Convertir todo a la misma UoM para comparación
+            total_in_product_uom = sum(
+                line.product_uom_id._compute_quantity(line.actual_qty, unbuild.product_uom_id)
+                for line in unbuild.unbuild_line_ids
+            )
+            
+            if float_compare(total_in_product_uom, unbuild.product_qty, 
+                           precision_rounding=unbuild.product_uom_id.rounding) > 0:
+                unbuild.qty_warning = _(
+                    '⚠️ La suma de productos (%(total)s %(uom)s) excede la cantidad inicial (%(initial)s %(uom)s)',
+                    total=round(total_in_product_uom, 2),
+                    initial=unbuild.product_qty,
+                    uom=unbuild.product_uom_id.name
+                )
+            else:
+                unbuild.qty_warning = False
     
     def action_prepare_lines(self):
         """Prepara las líneas de desmantelamiento basadas en la BoM"""
@@ -87,6 +118,14 @@ class MrpUnbuild(models.Model):
         
         if not self.bom_id:
             raise UserError(_('Debe seleccionar una lista de materiales antes de continuar.'))
+        
+        # Validar método de costeo
+        if self.product_id.cost_method == 'standard':
+            raise UserError(_(
+                'El producto "%s" usa método de costo estándar. '
+                'Este módulo requiere método FIFO o Promedio para distribuir costos correctamente.',
+                self.product_id.display_name
+            ))
         
         # Limpiar líneas existentes
         self.unbuild_line_ids.unlink()
@@ -114,6 +153,7 @@ class MrpUnbuild(models.Model):
                     'expected_qty': expected_qty,
                     'actual_qty': expected_qty,  # Inicializar con valor esperado
                     'product_uom_id': byproduct.product_uom_id.id,
+                    'value_factor': byproduct.value_factor if hasattr(byproduct, 'value_factor') else 1.0,
                     'is_waste': False,
                 })
                 sequence += 10
@@ -127,6 +167,7 @@ class MrpUnbuild(models.Model):
                     'expected_qty': line_data['qty'],
                     'actual_qty': line_data['qty'],
                     'product_uom_id': bom_line.product_uom_id.id,
+                    'value_factor': 1.0,  # Valor por defecto si no hay byproducts
                     'is_waste': False,
                 })
                 sequence += 10
@@ -159,10 +200,14 @@ class MrpUnbuild(models.Model):
         if not self.unbuild_line_ids:
             raise UserError(_('No hay líneas de desmantelamiento para procesar.'))
         
-        # Validar que el total de líneas sea igual o menor al producto inicial
-        total_actual = sum(self.unbuild_line_ids.mapped('actual_qty'))
+        # Validar método de costeo nuevamente
+        if self.product_id.cost_method == 'standard':
+            raise UserError(_(
+                'No se puede procesar el desmantelamiento. '
+                'El producto usa método de costo estándar que no es compatible con la distribución de costos.'
+            ))
         
-        # Convertir todo a la misma UoM para comparación
+        # Validar que el total de líneas sea igual o menor al producto inicial
         total_in_product_uom = sum(
             line.product_uom_id._compute_quantity(line.actual_qty, self.product_uom_id)
             for line in self.unbuild_line_ids
@@ -241,15 +286,6 @@ class MrpUnbuild(models.Model):
         
         return True
     
-    def _adjust_cost_valuation(self, consume_move, produce_moves):
-        """Ajusta la valoración de costos para los productos resultantes"""
-        # Este método será sobrescrito por mrp_account si está instalado
-        # Por ahora, solo verificamos que los costos se distribuyan correctamente
-        if consume_move.product_id.cost_method in ('fifo', 'average'):
-            # El sistema de valoración de Odoo debería manejar esto automáticamente
-            # basándose en el price_unit que establecimos en los movimientos
-            pass
-    
     def _create_consume_move(self):
         """Crea el movimiento de consumo del producto original"""
         self.ensure_one()
@@ -275,7 +311,7 @@ class MrpUnbuild(models.Model):
         
         # Calcular el costo total del producto original
         total_cost = 0.0
-        if hasattr(self, 'product_id') and self.product_id.cost_method in ('fifo', 'average'):
+        if self.product_id.cost_method in ('fifo', 'average'):
             # Obtener el costo unitario del producto
             quantity_svl = self.product_id.sudo().quantity_svl
             value_svl = self.product_id.sudo().value_svl
@@ -299,10 +335,9 @@ class MrpUnbuild(models.Model):
             else:
                 dest_location = self.location_dest_id
             
-            # Calcular precio unitario basado en cost_share
+            # Calcular precio unitario basado en cost_share (ya incluye value_factor)
             price_unit = 0.0
             if not line.is_waste and total_cost > 0 and line.actual_qty > 0:
-                # line.cost_share ya está como decimal (0.5 para 50%)
                 line_cost = total_cost * line.cost_share
                 price_unit = line_cost / line.actual_qty
             
@@ -318,11 +353,7 @@ class MrpUnbuild(models.Model):
                 'company_id': self.company_id.id,
                 'origin': self.name,
                 'price_unit': price_unit,
-                # El campo byproduct_id es importante para que el sistema reconozca estos como subproductos
-                'byproduct_id': False,  # No tenemos byproduct_id porque estamos usando líneas personalizadas
             }
-            
-            # NO agregar cost_share porque ese campo es para byproducts de producción, no unbuild
             
             moves |= self.env['stock.move'].create(move_vals)
         
@@ -376,7 +407,7 @@ class MrpUnbuild(models.Model):
         if good_lines:
             message_body += _("<u>Productos:</u><br/>")
             for line in good_lines:
-                message_body += _("- %(product)s: %(qty)s %(uom)s (%(cost).1f%%)<br/>",
+                message_body += _("- %(product)s: %(qty)s %(uom)s (%(cost).1f%% del costo)<br/>",
                     product=line.product_id.display_name,
                     qty=line.actual_qty,
                     uom=line.product_uom_id.name,
