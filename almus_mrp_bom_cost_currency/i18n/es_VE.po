@@ -1,0 +1,248 @@
+# Translation of Odoo Server.
+# This file contains the translation of the following modules:
+# 	* almus_manufacturing_cost_currency
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Odoo Server 17.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2024-01-01 12:00+00\n"
+"PO-Revision-Date: 2024-01-01 12:00+00\n"
+"Last-Translator: Almus Dev <info@almus.dev>\n"
+"Language-Team: Spanish (Venezuela) <info@almus.dev>\n"
+"Language: es_VE\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#. module: almus_manufacturing_cost_currency
+#: model:ir.model.fields,field_description:almus_manufacturing_cost_currency.field_product_product__manufacturing_alt_cost
+#: model:ir.model.fields,field_description:almus_manufacturing_cost_currency.field_product_template__manufacturing_alt_cost
+msgid "Manufacturing Alt. Cost"
+msgstr "Costo de Manufactura (Mon. Alt.)"
+
+#. module: almus_manufacturing_cost_currency
+#: model:ir.model.fields,help:almus_manufacturing_cost_currency.field_product_product__manufacturing_alt_cost
+#: model:ir.model.fields,help:almus_manufacturing_cost_currency.field_product_template__manufacturing_alt_cost
+msgid "Manufacturing cost calculated from BOM components alternative costs"
+msgstr "Costo de manufactura calculado desde los costos alternativos de los componentes de la LdM"
+
+#. module: almus_manufacturing_cost_currency
+#: model:ir.model.fields,field_description:almus_manufacturing_cost_currency.field_product_product__manufacturing_cost_state
+#: model:ir.model.fields,field_description:almus_manufacturing_cost_currency.field_product_template__manufacturing_cost_state
+msgid "Manufacturing Cost State"
+msgstr "Estado del Costo de Manufactura"
+
+#. module: almus_manufacturing_cost_currency
+#: model:ir.model.fields,help:almus_manufacturing_cost_currency.field_product_product__manufacturing_cost_state
+#: model:ir.model.fields,help:almus_manufacturing_cost_currency.field_product_template__manufacturing_cost_state
+msgid "State of the manufacturing cost calculation"
+msgstr "Estado del cálculo del costo de manufactura"
+
+#. module: almus_manufacturing_cost_currency
+#: model:ir.model.fields.selection,name:almus_manufacturing_cost_currency.selection__product_product__manufacturing_cost_state__ok
+#: model:ir.model.fields.selection,name:almus_manufacturing_cost_currency.selection__product_template__manufacturing_cost_state__ok
+msgid "OK"
+msgstr "OK"
+
+#. module: almus_manufacturing_cost_currency
+#: model:ir.model.fields.selection,name:almus_manufacturing_cost_currency.selection__product_product__manufacturing_cost_state__warning
+#: model:ir.model.fields.selection,name:almus_manufacturing_cost_currency.selection__product_template__manufacturing_cost_state__warning
+msgid "Warning"
+msgstr "Advertencia"
+
+#. module: almus_manufacturing_cost_currency
+#: model:ir.model.fields.selection,name:almus_manufacturing_cost_currency.selection__product_product__manufacturing_cost_state__no_bom
+#: model:ir.model.fields.selection,name:almus_manufacturing_cost_currency.selection__product_template__manufacturing_cost_state__no_bom
+msgid "No BOM"
+msgstr "Sin LdM"
+
+#. module: almus_manufacturing_cost_currency
+#: model:ir.model.fields.selection,name:almus_manufacturing_cost_currency.selection__product_product__manufacturing_cost_state__empty_bom
+#: model:ir.model.fields.selection,name:almus_manufacturing_cost_currency.selection__product_template__manufacturing_cost_state__empty_bom
+msgid "Empty BOM"
+msgstr "LdM Vacía"
+
+#. module: almus_manufacturing_cost_currency
+#: model:ir.model.fields.selection,name:almus_manufacturing_cost_currency.selection__product_product__manufacturing_cost_state__error
+msgid "Error"
+msgstr "Error"
+
+#. module: almus_manufacturing_cost_currency
+#: model:ir.model.fields.selection,name:almus_manufacturing_cost_currency.selection__product_pricelist_item__base__manufacturing_alt_cost
+msgid "Manufacturing Alternative Cost"
+msgstr "Costo de Manufactura Alternativo"
+
+#. module: almus_manufacturing_cost_currency
+#: code:addons/almus_manufacturing_cost_currency/models/product_pricelist_item.py:0
+#, python-format
+msgid "You must configure an alternative currency in settings before using Manufacturing Alternative Cost as base for pricelist rules."
+msgstr "Debe configurar una moneda alternativa en los ajustes antes de usar el Costo de Manufactura Alternativo como base para las reglas de lista de precios."
+
+#. module: almus_manufacturing_cost_currency
+#: code:addons/almus_manufacturing_cost_currency/models/product_pricelist_item.py:0
+#, python-format
+msgid "Cannot use Manufacturing Alternative Cost for product templates with multiple variants. Please create specific rules for each variant."
+msgstr "No se puede usar el Costo de Manufactura Alternativo para plantillas de producto con múltiples variantes. Por favor cree reglas específicas para cada variante."
+
+#. module: almus_manufacturing_cost_currency
+#: code:addons/almus_manufacturing_cost_currency/models/product_pricelist_item.py:0
+#, python-format
+msgid "Invalid alternative currency configuration. Please check system settings."
+msgstr "Configuración de moneda alternativa inválida. Por favor verifique los ajustes del sistema."
+
+#. module: almus_manufacturing_cost_currency
+#: code:addons/almus_manufacturing_cost_currency/models/product_pricelist_item.py:0
+#, python-format
+msgid "Product %s does not have an alternative currency configured, and no default alternative currency is set in system settings."
+msgstr "El producto %s no tiene una moneda alternativa configurada, y no hay una moneda alternativa por defecto establecida en los ajustes del sistema."
+
+#. module: almus_manufacturing_cost_currency
+#: code:addons/almus_manufacturing_cost_currency/models/product_pricelist_item.py:0
+#, python-format
+msgid "Configuration Required"
+msgstr "Configuración Requerida"
+
+#. module: almus_manufacturing_cost_currency
+#: code:addons/almus_manufacturing_cost_currency/models/product_pricelist_item.py:0
+#, python-format
+msgid "No alternative currency configured. Please configure it in Settings > Almus Apps > Cost Settings before using this option.\n\nThis option calculates prices based on manufacturing costs in the alternative currency."
+msgstr "No hay moneda alternativa configurada. Por favor configúrela en Ajustes > Aplicaciones Almus > Configuración de Costos antes de usar esta opción.\n\nEsta opción calcula los precios basándose en los costos de manufactura en la moneda alternativa."
+
+#. module: almus_manufacturing_cost_currency
+#: model_terms:ir.ui.view,arch_db:almus_manufacturing_cost_currency.product_pricelist_item_form_view_manufacturing_alt_cost
+msgid "Manufacturing Alternative Cost Information"
+msgstr "Información del Costo de Manufactura Alternativo"
+
+#. module: almus_manufacturing_cost_currency
+#: model_terms:ir.ui.view,arch_db:almus_manufacturing_cost_currency.product_pricelist_item_form_view_manufacturing_alt_cost
+msgid "The price will be calculated based on the product's manufacturing alternative cost."
+msgstr "El precio será calculado basándose en el costo de manufactura alternativo del producto."
+
+#. module: almus_manufacturing_cost_currency
+#: model_terms:ir.ui.view,arch_db:almus_manufacturing_cost_currency.product_pricelist_item_form_view_manufacturing_alt_cost
+msgid "This cost is automatically calculated from BOM components' alternative costs."
+msgstr "Este costo es calculado automáticamente desde los costos alternativos de los componentes de la LdM."
+
+#. module: almus_manufacturing_cost_currency
+#: model_terms:ir.ui.view,arch_db:almus_manufacturing_cost_currency.product_pricelist_item_form_view_manufacturing_alt_cost
+msgid "Manufactured products:"
+msgstr "Productos manufacturados:"
+
+#. module: almus_manufacturing_cost_currency
+#: model_terms:ir.ui.view,arch_db:almus_manufacturing_cost_currency.product_pricelist_item_form_view_manufacturing_alt_cost
+msgid "Uses calculated manufacturing cost from BOM"
+msgstr "Usa el costo de manufactura calculado desde la LdM"
+
+#. module: almus_manufacturing_cost_currency
+#: model_terms:ir.ui.view,arch_db:almus_manufacturing_cost_currency.product_pricelist_item_form_view_manufacturing_alt_cost
+msgid "Purchased products:"
+msgstr "Productos comprados:"
+
+#. module: almus_manufacturing_cost_currency
+#: model_terms:ir.ui.view,arch_db:almus_manufacturing_cost_currency.product_pricelist_item_form_view_manufacturing_alt_cost
+msgid "Falls back to regular alternative cost"
+msgstr "Usa el costo alternativo regular"
+
+#. module: almus_manufacturing_cost_currency
+#: model_terms:ir.ui.view,arch_db:almus_manufacturing_cost_currency.product_pricelist_item_form_view_manufacturing_alt_cost
+msgid "Warning:"
+msgstr "Advertencia:"
+
+#. module: almus_manufacturing_cost_currency
+#: model_terms:ir.ui.view,arch_db:almus_manufacturing_cost_currency.product_pricelist_item_form_view_manufacturing_alt_cost
+msgid "Products with missing component costs will show alerts"
+msgstr "Los productos con costos de componentes faltantes mostrarán alertas"
+
+#. module: almus_manufacturing_cost_currency
+#: model_terms:ir.ui.view,arch_db:almus_manufacturing_cost_currency.product_pricelist_item_search_manufacturing_alt_cost
+msgid "Based on Manuf. Cost"
+msgstr "Basado en Costo de Manuf."
+
+#. module: almus_manufacturing_cost_currency
+#: model_terms:ir.ui.view,arch_db:almus_manufacturing_cost_currency.product_pricelist_item_search_manufacturing_alt_cost
+msgid "Base"
+msgstr "Base"
+
+#. module: almus_manufacturing_cost_currency
+#: model_terms:ir.ui.view,arch_db:almus_manufacturing_cost_currency.product_product_form_view_manufacturing_cost
+#: model_terms:ir.ui.view,arch_db:almus_manufacturing_cost_currency.product_template_form_view_manufacturing_cost
+msgid "Manufacturing cost calculation has issues. Check BOM components."
+msgstr "El cálculo del costo de manufactura tiene problemas. Verifique los componentes de la LdM."
+
+#. module: almus_manufacturing_cost_currency
+#: model_terms:ir.ui.view,arch_db:almus_manufacturing_cost_currency.product_product_form_view_manufacturing_cost
+#: model_terms:ir.ui.view,arch_db:almus_manufacturing_cost_currency.product_template_form_view_manufacturing_cost
+msgid "per"
+msgstr "por"
+
+#. module: almus_manufacturing_cost_currency
+#: model_terms:ir.ui.view,arch_db:almus_manufacturing_cost_currency.product_product_form_view_manufacturing_cost
+#: model_terms:ir.ui.view,arch_db:almus_manufacturing_cost_currency.product_template_form_view_manufacturing_cost
+msgid "No Bill of Materials found"
+msgstr "No se encontró Lista de Materiales"
+
+#. module: almus_manufacturing_cost_currency
+#: model_terms:ir.ui.view,arch_db:almus_manufacturing_cost_currency.product_product_form_view_manufacturing_cost
+#: model_terms:ir.ui.view,arch_db:almus_manufacturing_cost_currency.product_template_form_view_manufacturing_cost
+msgid "Bill of Materials has no components"
+msgstr "La Lista de Materiales no tiene componentes"
+
+#. module: almus_manufacturing_cost_currency
+#: model_terms:ir.ui.view,arch_db:almus_manufacturing_cost_currency.product_product_form_view_manufacturing_cost
+#: model_terms:ir.ui.view,arch_db:almus_manufacturing_cost_currency.product_template_form_view_manufacturing_cost
+msgid "Some components have missing costs or circular dependencies"
+msgstr "Algunos componentes tienen costos faltantes o dependencias circulares"
+
+#. module: almus_manufacturing_cost_currency
+#: model:ir.model.fields,field_description:almus_manufacturing_cost_currency.field_product_product__manufacturing_alt_cost
+#: model:ir.model.fields,field_description:almus_manufacturing_cost_currency.field_product_template__manufacturing_alt_cost
+#: model_terms:ir.ui.view,arch_db:almus_manufacturing_cost_currency.product_product_tree_view_manufacturing_cost
+#: model_terms:ir.ui.view,arch_db:almus_manufacturing_cost_currency.product_template_tree_view_manufacturing_cost
+msgid "Manufacturing Cost (Alt. Currency)"
+msgstr "Costo de Manufactura (Mon. Alt.)"
+
+#. module: almus_manufacturing_cost_currency
+#: model:ir.actions.server,name:almus_manufacturing_cost_currency.action_recalculate_manufacturing_costs
+msgid "Recalculate Manufacturing Costs"
+msgstr "Recalcular Costos de Manufactura"
+
+#. module: almus_manufacturing_cost_currency
+#: code:addons/almus_manufacturing_cost_currency/views/product_views.xml:0
+#, python-format
+msgid "Manufacturing Costs Updated"
+msgstr "Costos de Manufactura Actualizados"
+
+#. module: almus_manufacturing_cost_currency
+#: code:addons/almus_manufacturing_cost_currency/views/product_views.xml:0
+#, python-format
+msgid "Recalculated manufacturing costs for %s products."
+msgstr "Se recalcularon los costos de manufactura para %s productos."
+
+#. module: almus_manufacturing_cost_currency
+#: code:addons/almus_manufacturing_cost_currency/views/product_views.xml:0
+#, python-format
+msgid "No Manufacturing Products"
+msgstr "Sin Productos de Manufactura"
+
+#. module: almus_manufacturing_cost_currency
+#: code:addons/almus_manufacturing_cost_currency/views/product_views.xml:0
+#, python-format
+msgid "Selected products do not have Bills of Materials."
+msgstr "Los productos seleccionados no tienen Listas de Materiales."
+
+#. module: almus_manufacturing_cost_currency
+#: model:ir.model,name:almus_manufacturing_cost_currency.model_product_product
+msgid "Product Variant"
+msgstr "Variante de Producto"
+
+#. module: almus_manufacturing_cost_currency
+#: model:ir.model,name:almus_manufacturing_cost_currency.model_product_template
+msgid "Product Template"
+msgstr "Plantilla de Producto"
+
+#. module: almus_manufacturing_cost_currency
+#: model:ir.model,name:almus_manufacturing_cost_currency.model_product_pricelist_item
+msgid "Pricelist Rule"
+msgstr "Regla de Lista de Precios"
