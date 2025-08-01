@@ -36,6 +36,14 @@ class ProductPricelistItem(models.Model):
 
     def _compute_base_price(self, product, quantity, uom, date, currency):
         """Override to handle manufacturing alternative cost calculation"""
+        
+        # CORRECCIÓN: Verificar que self tenga registros antes de ensure_one()
+        if not self:
+            # Si no hay regla, usar el comportamiento estándar
+            return super(ProductPricelistItem, self)._compute_base_price(
+                product, quantity, uom, date, currency
+            )
+        
         self.ensure_one()
         
         # Si no es manufacturing_alt_cost, usar el comportamiento estándar
