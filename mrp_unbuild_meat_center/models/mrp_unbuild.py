@@ -2,10 +2,13 @@
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 # Developer: Almus Dev (JDV-ALM) - www.almus.dev
 
-from odoo import api, fields, models, _
+from odoo import api, fields, models, _, Command
 from odoo.exceptions import UserError, ValidationError
 from odoo.tools import float_compare, float_round, float_is_zero
 from collections import defaultdict
+import logging
+
+_logger = logging.getLogger(__name__)
 
 
 class MrpUnbuild(models.Model):
@@ -194,6 +197,43 @@ class MrpUnbuild(models.Model):
         if not self.unbuild_line_ids:
             raise UserError(_('No hay líneas de desmantelamiento para procesar.'))
         
+        # NUEVA VALIDACIÓN: Verificar que hay suficiente stock disponible
+        available_qty = self.env['stock.quant']._get_available_quantity(
+            self.product_id, 
+            self.location_id, 
+            self.lot_id,
+            strict=True
+        )
+        
+        if float_compare(available_qty, self.product_qty, 
+                         precision_rounding=self.product_uom_id.rounding) < 0:
+            # Si hay lote especificado, incluirlo en el mensaje
+            if self.lot_id:
+                raise ValidationError(_(
+                    'Stock insuficiente del producto %(product)s con lote %(lot)s.\n'
+                    'Disponible: %(available)s %(uom)s\n'
+                    'Requerido: %(required)s %(uom)s\n'
+                    'Ubicación: %(location)s',
+                    product=self.product_id.display_name,
+                    lot=self.lot_id.name,
+                    available=round(available_qty, 2),
+                    required=self.product_qty,
+                    uom=self.product_uom_id.name,
+                    location=self.location_id.complete_name
+                ))
+            else:
+                raise ValidationError(_(
+                    'Stock insuficiente del producto %(product)s.\n'
+                    'Disponible: %(available)s %(uom)s\n'
+                    'Requerido: %(required)s %(uom)s\n'
+                    'Ubicación: %(location)s',
+                    product=self.product_id.display_name,
+                    available=round(available_qty, 2),
+                    required=self.product_qty,
+                    uom=self.product_uom_id.name,
+                    location=self.location_id.complete_name
+                ))
+        
         # Validar que el total de líneas sea igual o menor al producto inicial
         total_in_product_uom = sum(
             line.product_uom_id._compute_quantity(line.actual_qty, self.product_uom_id)
@@ -225,12 +265,40 @@ class MrpUnbuild(models.Model):
         self.ensure_one()
         
         if self.state == 'ready' and self.unbuild_line_ids:
-            # Validar cantidades
+            # Validar cantidades y stock disponible
             self.action_validate_quantities()
             
             # Usar nuestro proceso personalizado completamente
             return self._custom_unbuild_process()
         else:
+            # Para unbuild estándar, también validar stock
+            if self.state == 'draft':
+                # Validar stock disponible antes de procesar
+                available_qty = self.env['stock.quant']._get_available_quantity(
+                    self.product_id, 
+                    self.location_id, 
+                    self.lot_id,
+                    strict=True
+                )
+                
+                if float_compare(available_qty, self.product_qty, 
+                               precision_rounding=self.product_uom_id.rounding) < 0:
+                    # Ofrecer crear ajuste de inventario si no hay suficiente stock
+                    return {
+                        'name': _('Stock Insuficiente'),
+                        'type': 'ir.actions.act_window',
+                        'view_mode': 'form',
+                        'res_model': 'stock.warn.insufficient.qty.unbuild',
+                        'target': 'new',
+                        'context': {
+                            'default_product_id': self.product_id.id,
+                            'default_location_id': self.location_id.id,
+                            'default_unbuild_id': self.id,
+                            'default_quantity': self.product_qty,
+                            'default_product_uom_name': self.product_uom_id.name,
+                        }
+                    }
+            
             # Comportamiento estándar si no hay líneas
             return super().action_unbuild()
     
@@ -239,11 +307,14 @@ class MrpUnbuild(models.Model):
         self.ensure_one()
         self._check_company()
         
+        _logger.info(f"========= INICIANDO UNBUILD PERSONALIZADO {self.name} =========")
+        
         if self.product_id.tracking != 'none' and not self.lot_id:
             raise UserError(_('Debe proporcionar un lote para el producto final.'))
         
         # Calcular el costo total del producto a desmantelar
         total_cost = self._get_product_total_cost()
+        _logger.info(f"Costo total calculado: {total_cost}")
         
         # Crear todos los movimientos de una vez
         moves = self.env['stock.move']
@@ -263,6 +334,7 @@ class MrpUnbuild(models.Model):
             'procure_method': 'make_to_stock',
         })
         moves |= consume_move
+        _logger.info(f"Movimiento de consumo creado: {consume_move.name}")
         
         # 2. Movimientos de producción (entrada de subproductos)
         for line in self.unbuild_line_ids:
@@ -285,6 +357,8 @@ class MrpUnbuild(models.Model):
                 # Usar el cost_share calculado (que ya considera el factor de valor)
                 line_cost = total_cost * line.cost_share
                 price_unit = line_cost / line.actual_qty if line.actual_qty > 0 else 0.0
+            
+            _logger.info(f"Creando movimiento para {line.product_id.name}: qty={line.actual_qty}, price={price_unit}")
             
             produce_move = self.env['stock.move'].create({
                 'name': self.name,
@@ -339,19 +413,37 @@ class MrpUnbuild(models.Model):
         # 5. Marcar como picked
         moves.picked = True
         
-        # 6. Procesar movimientos
+        # 6. IMPORTANTE: Añadir contexto para evitar corrección de costos
+        moves = moves.with_context(
+            skip_unbuild_cost_correction=True,
+            custom_unbuild_lines=True
+        )
+        
+        # 7. Procesar movimientos
+        _logger.info("Procesando movimientos con contexto skip_unbuild_cost_correction=True")
+        
         # Procesar primero el movimiento de consumo
-        consume_move._action_done()
+        consume_move.with_context(
+            skip_unbuild_cost_correction=True,
+            custom_unbuild_lines=True
+        )._action_done()
         
         # Procesar los movimientos de producción
         for move in moves - consume_move:
-            move._action_done()
+            move.with_context(
+                skip_unbuild_cost_correction=True,
+                custom_unbuild_lines=True
+            )._action_done()
         
-        # 7. Actualizar estado
+        _logger.info(f"Movimientos procesados. SVLs creados: {moves.mapped('stock_valuation_layer_ids')}")
+        
+        # 8. Actualizar estado
         self.state = 'done'
         
-        # 8. Publicar mensaje
+        # 9. Publicar mensaje
         self._post_inventory_message()
+        
+        _logger.info(f"========= UNBUILD PERSONALIZADO {self.name} COMPLETADO =========")
         
         return True
     
@@ -437,36 +529,60 @@ class StockMove(models.Model):
     _inherit = 'stock.move'
     
     def _create_out_svl(self, forced_quantity=None):
-        """Sobrescribe para evitar crear diferencias en unbuild personalizado"""
-        # Primero crear las SVL normalmente
+        """
+        Sobrescribe para evitar crear correcciones de costo en unbuild personalizado
+        """
+        # Si el contexto indica saltar corrección, hacerlo
+        if self.env.context.get('skip_unbuild_cost_correction'):
+            _logger.info("Saltando corrección de costo de unbuild por contexto")
+            return super()._create_out_svl(forced_quantity)
+        
+        # Crear las SVL normalmente
         svls = super()._create_out_svl(forced_quantity)
         
-        # Si hay unbuild con líneas personalizadas, NO crear corrección de costos
+        # Filtrar solo las SVL de unbuild
         unbuild_svls = svls.filtered('stock_move_id.unbuild_id')
         
-        # Filtrar solo los unbuild que NO tienen líneas personalizadas
-        # (mantener comportamiento estándar para unbuild normales)
-        unbuild_svls_to_correct = unbuild_svls.filtered(
-            lambda svl: not svl.stock_move_id.unbuild_id.unbuild_line_ids
-        )
-        
-        if not unbuild_svls_to_correct:
-            # Si todos los unbuild tienen líneas personalizadas, no crear corrección
+        # Si no hay SVL de unbuild, retornar normal
+        if not unbuild_svls:
             return svls
         
-        # Para unbuild normales (sin líneas personalizadas), mantener lógica estándar
+        _logger.info(f"Procesando {len(unbuild_svls)} SVLs de unbuild")
+        
+        # Lista para movimientos de corrección
         unbuild_cost_correction_move_list = []
-        for svl in unbuild_svls_to_correct:
-            # Verificar que existe un MO asociado
-            if not svl.stock_move_id.unbuild_id.mo_id:
-                continue
-                
-            build_time_unit_cost = svl.stock_move_id.unbuild_id.mo_id.move_finished_ids.filtered(
-                lambda m: m.product_id == svl.product_id
-            ).stock_valuation_layer_ids.unit_cost
+        
+        for svl in unbuild_svls:
+            unbuild = svl.stock_move_id.unbuild_id
             
+            # IMPORTANTE: Solo procesar si:
+            # 1. Hay MO asociado
+            # 2. NO hay líneas personalizadas
+            if not unbuild.mo_id:
+                _logger.info(f"Unbuild {unbuild.name} no tiene MO, saltando corrección")
+                continue
+            
+            if unbuild.unbuild_line_ids:
+                _logger.info(f"Unbuild {unbuild.name} tiene líneas personalizadas, saltando corrección")
+                continue
+            
+            # Buscar los movimientos finalizados del MO
+            mo_finished_moves = unbuild.mo_id.move_finished_ids.filtered(
+                lambda m: m.product_id == svl.product_id and m.state == 'done'
+            )
+            
+            # Si no hay movimientos finalizados o no tienen SVL, saltar
+            if not mo_finished_moves or not mo_finished_moves.stock_valuation_layer_ids:
+                _logger.info(f"No hay movimientos finalizados o SVL para producto {svl.product_id.name}")
+                continue
+            
+            # Calcular la diferencia de costo
+            build_time_unit_cost = mo_finished_moves.stock_valuation_layer_ids[0].unit_cost
             unbuild_difference = svl.unit_cost - build_time_unit_cost
             
+            _logger.info(f"Diferencia de costo: {unbuild_difference} para {svl.product_id.name}")
+            
+            # Solo crear corrección si hay diferencia y es valoración en tiempo real
             if svl.product_id.valuation == 'real_time' and not svl.currency_id.is_zero(unbuild_difference):
                 product_accounts = svl.product_id.product_tmpl_id.get_product_accounts()
                 valuation_account = product_accounts.get('stock_valuation')
@@ -475,47 +591,53 @@ class StockMove(models.Model):
                 if not valuation_account or not production_account:
                     continue
                 
-                desc = _('%s - Unbuild Cost Difference', svl.stock_move_id.unbuild_id.name)
+                desc = _('%s - Unbuild Cost Difference', unbuild.name)
                 unbuild_cost_correction_move_list.append({
                     'journal_id': product_accounts['stock_journal'].id,
                     'date': fields.Date.context_today(self),
                     'ref': desc,
                     'move_type': 'entry',
-                    'line_ids': [(0, 0, {
+                    'line_ids': [Command.create({
                         'name': desc,
-                        'account_id': valuation_account.id,
-                        'debit': unbuild_difference if unbuild_difference > 0 else 0,
-                        'credit': -unbuild_difference if unbuild_difference < 0 else 0,
+                        'ref': desc,
+                        'account_id': account.id,
+                        'balance': balance,
                         'product_id': svl.product_id.id,
-                    }), (0, 0, {
-                        'name': desc,
-                        'account_id': production_account.id,
-                        'debit': -unbuild_difference if unbuild_difference < 0 else 0,
-                        'credit': unbuild_difference if unbuild_difference > 0 else 0,
-                        'product_id': svl.product_id.id,
-                    })],
+                    }) for account, balance in (
+                        (valuation_account, unbuild_difference),
+                        (production_account, -unbuild_difference),
+                    )],
                 })
         
+        # Crear los movimientos de corrección si hay alguno
         if unbuild_cost_correction_move_list:
+            _logger.info(f"Creando {len(unbuild_cost_correction_move_list)} movimientos de corrección")
             unbuild_cost_correction_moves = self.env['account.move'].sudo().create(unbuild_cost_correction_move_list)
             unbuild_cost_correction_moves._post()
+        else:
+            _logger.info("No se crearon movimientos de corrección")
         
         return svls
     
     def _create_in_svl(self, forced_quantity=None):
-        """Controla la creación de SVL para movimientos de entrada en unbuild"""
-        # Si es un movimiento de producción de unbuild con price_unit establecido
-        if self.consume_unbuild_id and self.consume_unbuild_id.unbuild_line_ids and self.price_unit:
-            # Si ya tiene SVL, no crear más
-            if self.stock_valuation_layer_ids:
-                return self.env['stock.valuation.layer']
-                
+        """
+        Controla la creación de SVL para movimientos de entrada en unbuild
+        """
+        # Si es un movimiento de producción de unbuild con líneas personalizadas y price_unit
+        if (self.consume_unbuild_id and 
+            self.consume_unbuild_id.unbuild_line_ids and 
+            self.price_unit is not False and
+            self.price_unit > 0):
+            
+            _logger.info(f"Creando SVL personalizado para {self.product_id.name} con precio {self.price_unit}")
+            
             # Crear SVL con el precio que establecimos
             svl_vals_list = []
             for move in self:
                 move = move.with_company(move.company_id)
                 valued_move_lines = move._get_in_move_lines()
                 valued_quantity = sum(valued_move_lines.mapped("quantity_product_uom"))
+                
                 if float_is_zero(forced_quantity or valued_quantity, precision_rounding=move.product_id.uom_id.rounding):
                     continue
                 
@@ -538,38 +660,25 @@ class StockMove(models.Model):
             
             return self.env['stock.valuation.layer'].sudo().create(svl_vals_list)
         else:
+            # Comportamiento estándar
             return super()._create_in_svl(forced_quantity)
+
+
+# Monkey patch para asegurar que funcione
+# IMPORTANTE: Este es un último recurso pero necesario
+from odoo.addons.mrp_account.models import stock_move as mrp_stock_move
+
+original_create_out_svl = mrp_stock_move.StockMove._create_out_svl
+
+def _create_out_svl_override(self, forced_quantity=None):
+    """Override completo del método problemático"""
+    # Si es un unbuild con líneas personalizadas, no crear corrección
+    if self.env.context.get('skip_unbuild_cost_correction'):
+        # Llamar al método del padre de mrp_account (stock_account)
+        return super(mrp_stock_move.StockMove, self)._create_out_svl(forced_quantity)
     
-    def _create_in_svl(self, forced_quantity=None):
-        """Controla la creación de SVL para movimientos de entrada en unbuild"""
-        # Si es un movimiento de producción de unbuild con price_unit establecido
-        if self.consume_unbuild_id and self.consume_unbuild_id.unbuild_line_ids and self.price_unit:
-            # Crear SVL con el precio que establecimos
-            svl_vals_list = []
-            for move in self:
-                move = move.with_company(move.company_id)
-                valued_move_lines = move._get_in_move_lines()
-                valued_quantity = sum(valued_move_lines.mapped("quantity_product_uom"))
-                if float_is_zero(forced_quantity or valued_quantity, precision_rounding=move.product_id.uom_id.rounding):
-                    continue
-                
-                quantity = forced_quantity or valued_quantity
-                # Usar el price_unit que establecimos
-                unit_cost = move.price_unit
-                
-                svl_vals = {
-                    'product_id': move.product_id.id,
-                    'value': quantity * unit_cost,
-                    'unit_cost': unit_cost,
-                    'quantity': quantity,
-                    'remaining_qty': quantity,
-                    'remaining_value': quantity * unit_cost,
-                    'stock_move_id': move.id,
-                    'company_id': move.company_id.id,
-                    'description': move.reference and '%s - %s' % (move.reference, move.product_id.name) or move.product_id.name,
-                }
-                svl_vals_list.append(svl_vals)
-            
-            return self.env['stock.valuation.layer'].sudo().create(svl_vals_list)
-        else:
-            return super()._create_in_svl(forced_quantity)
+    # Comportamiento normal
+    return original_create_out_svl(self, forced_quantity)
+
+# Aplicar el monkey patch
+mrp_stock_move.StockMove._create_out_svl = _create_out_svl_override
