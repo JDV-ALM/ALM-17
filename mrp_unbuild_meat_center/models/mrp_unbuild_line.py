@@ -33,11 +33,6 @@ class MrpUnbuildLine(models.Model):
         check_company=True
     )
     
-    product_tracking = fields.Selection(
-        related='product_id.tracking',
-        string='Seguimiento'
-    )
-    
     expected_qty = fields.Float(
         string='Cantidad Esperada',
         digits='Product Unit of Measure',
@@ -83,7 +78,8 @@ class MrpUnbuildLine(models.Model):
         string='Factor de Valor',
         default=1.0,
         digits=(12, 2),
-        help="Factor multiplicador para distribución de costos"
+        help="Factor multiplicador para distribución de costos. "
+             "Ej: 1.0 = valor estándar, 10.0 = 10 veces más valioso"
     )
     
     # Distribución de costo calculada
@@ -106,13 +102,6 @@ class MrpUnbuildLine(models.Model):
         related='unbuild_id.company_id',
         string='Compañía',
         store=True
-    )
-    
-    # Campo para mostrar valor relativo
-    relative_value = fields.Float(
-        string='Valor Relativo',
-        compute='_compute_relative_value',
-        help="Valor relativo considerando cantidad y factor"
     )
     
     @api.depends('actual_qty', 'value_factor', 'is_waste', 
@@ -143,12 +132,6 @@ class MrpUnbuildLine(models.Model):
                         line.cost_share = 0.0
                 else:
                     line.cost_share = 0.0
-    
-    @api.depends('actual_qty', 'value_factor')
-    def _compute_relative_value(self):
-        """Calcula el valor relativo del producto"""
-        for line in self:
-            line.relative_value = line.actual_qty * line.value_factor
     
     def _get_qty_in_base_uom(self):
         """Convierte la cantidad a la UdM base del producto"""
@@ -187,62 +170,21 @@ class MrpUnbuildLine(models.Model):
                         )
                     }
                 }
-            else:
-                return {
-                    'warning': {
-                        'title': _('Producto marcado como desecho'),
-                        'message': _(
-                            'Este producto no recibirá costo y será movido a: %s',
-                            scrap_location.complete_name
-                        )
-                    }
-                }
     
-    @api.onchange('value_factor')
-    def _onchange_value_factor(self):
-        """Advertir cuando se modifica el factor de valor"""
-        if self.value_factor_bom > 0 and self.value_factor != self.value_factor_bom:
-            return {
-                'warning': {
-                    'title': _('Factor de valor modificado'),
-                    'message': _(
-                        'Has modificado el factor de valor. '
-                        'Valor original de la BoM: %.2f',
-                        self.value_factor_bom
-                    )
-                }
-            }
-    
-    @api.constrains('actual_qty')
-    def _check_actual_qty(self):
-        """Valida que la cantidad real sea positiva"""
+    @api.constrains('actual_qty', 'value_factor')
+    def _check_positive_values(self):
+        """Valida que la cantidad real y el factor de valor sean positivos"""
         for line in self:
-            if line.product_uom_id and float_compare(line.actual_qty, 0, 
-                                                     precision_rounding=line.product_uom_id.rounding) < 0:
+            # Validar cantidad
+            if line.product_uom_id and float_compare(
+                line.actual_qty, 0, 
+                precision_rounding=line.product_uom_id.rounding
+            ) < 0:
                 raise ValidationError(_('La cantidad real debe ser positiva.'))
-    
-    @api.constrains('value_factor')
-    def _check_value_factor(self):
-        """Valida que el factor de valor sea positivo"""
-        for line in self:
+            
+            # Validar factor de valor
             if line.value_factor <= 0:
                 raise ValidationError(_(
                     'El factor de valor debe ser mayor que cero. '
                     'Use 1.0 para valor estándar.'
                 ))
-    
-    @api.constrains('is_waste')
-    def _check_waste_location(self):
-        """Valida que exista ubicación de desecho si hay productos marcados como tal"""
-        for line in self:
-            if line.is_waste and line.company_id:
-                scrap_location = self.env['stock.location'].search([
-                    ('scrap_location', '=', True),
-                    ('company_id', 'in', [line.company_id.id, False])
-                ], limit=1)
-                
-                if not scrap_location:
-                    raise UserError(_(
-                        'No se puede marcar como desecho. '
-                        'No hay ubicación de desecho configurada en el sistema.'
-                    ))
