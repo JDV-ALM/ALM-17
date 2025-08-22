@@ -6,6 +6,14 @@
         <field name="model">mrp.unbuild</field>
         <field name="inherit_id" ref="mrp.mrp_unbuild_form_view"/>
         <field name="arch" type="xml">
+            <!-- Agregar fecha de desmantelamiento después del campo de cantidad -->
+            <xpath expr="//field[@name='product_qty']" position="after">
+                <field name="unbuild_date" 
+                       widget="datetime"
+                       invisible="state == 'done'"
+                       required="1"/>
+            </xpath>
+            
             <!-- Agregar botón de preparar líneas antes del botón de validar -->
             <xpath expr="//button[@name='action_validate']" position="before">
                 <button name="action_prepare_lines" 
@@ -27,6 +35,13 @@
                         string="Desmantelar" 
                         type="object" 
                         class="btn-primary"
+                        invisible="state != 'ready'"
+                        groups="mrp.group_mrp_user"
+                        confirm="¿Está seguro de procesar este desmantelamiento? Esta acción no se puede revertir."/>
+                <button name="action_cancel" 
+                        string="Cancelar" 
+                        type="object" 
+                        class="btn-secondary"
                         invisible="state != 'ready'"
                         groups="mrp.group_mrp_user"/>
             </xpath>
@@ -54,6 +69,7 @@
                     </group>
                     <group>
                         <field name="total_waste_qty" widget="float" digits="[16,3]"/>
+                        <field name="total_no_cost_qty" widget="float" digits="[16,3]"/>
                         <field name="yield_percentage" widget="percentage"/>
                     </group>
                 </group>
@@ -67,13 +83,15 @@
                                context="{'default_company_id': company_id}">
                             <tree string="Líneas de Desmantelamiento" 
                                   editable="bottom"
-                                  decoration-muted="is_waste"
-                                  decoration-bf="not is_waste"
-                                  decoration-warning="value_factor != value_factor_bom">
+                                  decoration-muted="is_waste or no_cost_distribution"
+                                  decoration-bf="not is_waste and not no_cost_distribution"
+                                  decoration-warning="value_factor != value_factor_bom or no_cost_distribution != no_cost_distribution_bom"
+                                  decoration-info="no_cost_distribution and not is_waste">
                                 <field name="sequence" widget="handle"/>
                                 <field name="product_id" 
                                        options="{'no_create': True}"
-                                       domain="[('type', 'in', ['product', 'consu'])]"/>
+                                       domain="[('type', 'in', ['product', 'consu'])]"
+                                       readonly="state == 'done'"/>
                                 <field name="expected_qty" 
                                        widget="float" 
                                        digits="[16,3]"
@@ -83,32 +101,51 @@
                                        widget="float" 
                                        digits="[16,3]"
                                        decoration-danger="actual_qty &lt; 0"
-                                       required="1"/>
+                                       required="1"
+                                       readonly="state == 'done'"/>
                                 <field name="product_uom_category_id" column_invisible="True"/>
                                 <field name="product_uom_id" 
                                        groups="uom.group_uom"
                                        domain="[('category_id', '=', product_uom_category_id)]"
-                                       options="{'no_create': True}"/>
+                                       options="{'no_create': True}"
+                                       readonly="state == 'done'"/>
                                 <field name="value_factor_bom" 
                                        optional="hide"
                                        readonly="1"
+                                       string="Factor BoM"
                                        help="Factor de valor original de la BoM"/>
                                 <field name="value_factor" 
                                        optional="show"
                                        decoration-warning="value_factor != value_factor_bom"
-                                       help="Factor de valor del producto. Puede ajustarse para este desmantelamiento"/>
+                                       help="Factor de valor del producto (0.01 - 100.00)"
+                                       readonly="state == 'done' or no_cost_distribution or is_waste"/>
+                                <field name="no_cost_distribution_bom"
+                                       optional="hide"
+                                       readonly="1"
+                                       string="Sin Costo BoM"
+                                       help="Configuración original de no distribuir costos desde la BoM"/>
+                                <field name="no_cost_distribution"
+                                       string="Sin Costo"
+                                       help="Si está marcado, este producto no recibirá costos"
+                                       readonly="state == 'done'"/>
                                 <field name="lot_id" 
                                        groups="stock.group_production_lot"
                                        domain="[('product_id', '=', product_id), ('company_id', '=', parent.company_id)]"
                                        context="{'default_product_id': product_id, 'default_company_id': parent.company_id}"
-                                       invisible="product_id.tracking == 'none'"
-                                       required="product_id.tracking != 'none'"/>
-                                <field name="is_waste" string="Desecho"/>
+                                       invisible="product_id and product_id.tracking == 'none'"
+                                       required="product_id and product_id.tracking != 'none' and actual_qty > 0"
+                                       readonly="state == 'done'"/>
+                                <field name="is_waste" 
+                                       string="Desecho"
+                                       readonly="state == 'done'"/>
                                 <field name="cost_share" 
                                        widget="percentage" 
                                        optional="show"
-                                       readonly="1"/>
+                                       readonly="1"
+                                       decoration-success="cost_share > 0"
+                                       decoration-muted="cost_share == 0"/>
                                 <field name="company_id" column_invisible="True"/>
+                                <field name="state" column_invisible="True"/>
                             </tree>
                             
                             <!-- Vista kanban para líneas -->
@@ -117,6 +154,7 @@
                                 <field name="actual_qty"/>
                                 <field name="product_uom_id"/>
                                 <field name="is_waste"/>
+                                <field name="no_cost_distribution"/>
                                 <field name="cost_share"/>
                                 <field name="value_factor"/>
                                 <templates>
@@ -138,9 +176,15 @@
                                                 <div t-if="record.is_waste.raw_value" class="text-danger">
                                                     <i class="fa fa-trash"/> Desecho
                                                 </div>
+                                                <div t-elif="record.no_cost_distribution.raw_value" class="text-info">
+                                                    <i class="fa fa-ban"/> Sin distribución de costo
+                                                </div>
                                                 <div t-else="">
                                                     <strong>Costo: </strong>
                                                     <field name="cost_share" widget="percentage"/>
+                                                    <br/>
+                                                    <strong>Factor: </strong>
+                                                    <field name="value_factor"/>
                                                 </div>
                                             </div>
                                         </div>
@@ -157,9 +201,23 @@
                                 </h4>
                                 <ul class="mb-0">
                                     <li>Ajuste las <b>cantidades reales</b> obtenidas del desmantelamiento</li>
-                                    <li>El <b>factor de valor</b> viene de la lista de materiales pero puede ajustarse si es necesario</li>
+                                    <li>El <b>factor de valor</b> viene de la lista de materiales pero puede ajustarse (rango: 0.01 - 100.00)</li>
+                                    <li>Marque <b>"Sin Costo"</b> para productos que no deben recibir distribución de costos</li>
                                     <li>Los productos marcados como <b>desecho</b> no recibirán costo y serán enviados a la ubicación de desecho</li>
                                     <li>La <b>distribución de costo</b> se calcula automáticamente basada en cantidad × factor de valor</li>
+                                </ul>
+                            </div>
+                            
+                            <!-- Leyenda de colores -->
+                            <div class="alert alert-light" role="alert">
+                                <h4 class="alert-heading">
+                                    <i class="fa fa-paint-brush"/> Leyenda de Colores
+                                </h4>
+                                <ul class="mb-0">
+                                    <li><span class="text-muted">Gris</span>: Productos marcados como desecho o sin distribución de costos</li>
+                                    <li><span class="text-info">Azul</span>: Productos sin distribución de costos (pero no desecho)</li>
+                                    <li><span class="text-warning">Amarillo</span>: Valores modificados respecto a la BoM original</li>
+                                    <li><b>Negrita</b>: Productos que reciben distribución de costos</li>
                                 </ul>
                             </div>
                             
@@ -176,6 +234,7 @@
                     <page string="Información Adicional" name="extra_info">
                         <group>
                             <group string="Fechas">
+                                <field name="unbuild_date" string="Fecha de Desmantelamiento" readonly="1"/>
                                 <field name="create_date" string="Fecha de Creación" readonly="1"/>
                                 <field name="write_date" string="Última Modificación" readonly="1"/>
                             </group>
@@ -198,6 +257,9 @@
         <field name="arch" type="xml">
             <!-- Agregar estado y rendimiento en la vista de árbol -->
             <xpath expr="//field[@name='product_qty']" position="after">
+                <field name="unbuild_date" 
+                       widget="datetime"
+                       optional="show"/>
                 <field name="yield_percentage" 
                        widget="percentage"
                        optional="show"/>
@@ -220,6 +282,20 @@
                 <filter string="Listo para Procesar" 
                         name="ready" 
                         domain="[('state', '=', 'ready')]"/>
+                <separator/>
+                <filter string="Con Desechos" 
+                        name="with_waste" 
+                        domain="[('unbuild_line_ids.is_waste', '=', True)]"/>
+                <filter string="Sin Distribución de Costos" 
+                        name="no_cost" 
+                        domain="[('unbuild_line_ids.no_cost_distribution', '=', True)]"/>
+            </xpath>
+            
+            <!-- Agregar agrupación por fecha -->
+            <xpath expr="//group" position="inside">
+                <filter string="Fecha de Desmantelamiento" 
+                        name="group_unbuild_date" 
+                        context="{'group_by': 'unbuild_date:day'}"/>
             </xpath>
         </field>
     </record>
@@ -239,21 +315,85 @@
                     <strong>Rendimiento: </strong>
                     <field name="yield_percentage" widget="percentage"/>
                 </div>
+                <div t-if="record.unbuild_date" class="text-muted mt-1">
+                    <i class="fa fa-calendar"/> 
+                    <field name="unbuild_date" widget="datetime"/>
+                </div>
             </xpath>
         </field>
     </record>
     
-    <!-- Vista de formulario para mrp.bom con factor de valor en byproducts -->
+    <!-- Vista de formulario para mrp.bom con factor de valor y no distribuir costos en byproducts -->
     <record id="mrp_bom_form_view_value_factor" model="ir.ui.view">
         <field name="name">mrp.bom.form.value.factor</field>
         <field name="model">mrp.bom</field>
         <field name="inherit_id" ref="mrp.mrp_bom_form_view"/>
         <field name="arch" type="xml">
-            <!-- Agregar columna en la pestaña de subproductos -->
+            <!-- Agregar columnas en la pestaña de subproductos -->
             <xpath expr="//field[@name='byproduct_ids']/tree/field[@name='product_qty']" position="after">
                 <field name="value_factor" 
                        optional="show"
-                       help="Factor multiplicador para distribución de costos en desmantelamiento. &#10;Ejemplos: &#10;- Cortes premium (lomito): 10.0 &#10;- Cortes estándar: 1.0 &#10;- Cortes económicos (hueso): 0.5"/>
+                       decoration-bf="value_factor > 1"
+                       decoration-muted="value_factor &lt; 1"
+                       help="Factor multiplicador para distribución de costos (0.01 - 100.00)&#10;Ejemplos:&#10;• Cortes premium: 10.00 - 100.00&#10;• Cortes estándar: 1.00&#10;• Cortes económicos: 0.10 - 0.50&#10;• Huesos/cartílagos: 0.01 - 0.10"/>
+                <field name="no_cost_distribution"
+                       string="Sin Costo"
+                       optional="show"
+                       help="Si está marcado, este producto no recibirá costos en el desmantelamiento"/>
+            </xpath>
+            
+            <!-- Vista kanban para byproducts si existe -->
+            <xpath expr="//field[@name='byproduct_ids']" position="inside">
+                <kanban class="o_kanban_mobile">
+                    <field name="product_id"/>
+                    <field name="product_qty"/>
+                    <field name="product_uom_id"/>
+                    <field name="value_factor"/>
+                    <field name="no_cost_distribution"/>
+                    <templates>
+                        <t t-name="kanban-box">
+                            <div class="oe_kanban_card oe_kanban_global_click">
+                                <div class="o_kanban_record_top">
+                                    <div class="o_kanban_record_headings">
+                                        <strong class="o_kanban_record_title">
+                                            <field name="product_id"/>
+                                        </strong>
+                                    </div>
+                                </div>
+                                <div class="o_kanban_record_body">
+                                    <div>
+                                        <strong>Cantidad: </strong>
+                                        <field name="product_qty"/> 
+                                        <field name="product_uom_id"/>
+                                    </div>
+                                    <div t-if="record.no_cost_distribution.raw_value" class="text-info">
+                                        <i class="fa fa-ban"/> Sin distribución de costo
+                                    </div>
+                                    <div t-else="">
+                                        <strong>Factor de Valor: </strong>
+                                        <field name="value_factor"/>
+                                    </div>
+                                </div>
+                            </div>
+                        </t>
+                    </templates>
+                </kanban>
+            </xpath>
+        </field>
+    </record>
+    
+    <!-- Vista de árbol para mrp.bom con información de subproductos -->
+    <record id="mrp_bom_tree_view_meat_center" model="ir.ui.view">
+        <field name="name">mrp.bom.tree.meat.center</field>
+        <field name="model">mrp.bom</field>
+        <field name="inherit_id" ref="mrp.mrp_bom_tree_view"/>
+        <field name="arch" type="xml">
+            <!-- Agregar conteo de subproductos -->
+            <xpath expr="//field[@name='code']" position="after">
+                <field name="byproduct_ids" 
+                       widget="many2many_tags"
+                       optional="hide"
+                       options="{'no_create': True}"/>
             </xpath>
         </field>
     </record>

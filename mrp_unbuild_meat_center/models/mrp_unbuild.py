@@ -23,6 +23,15 @@ class MrpUnbuild(models.Model):
         ondelete={'ready': 'set draft'}
     )
     
+    # Fecha del desmantelamiento
+    unbuild_date = fields.Datetime(
+        string='Fecha de Desmantelamiento',
+        default=fields.Datetime.now,
+        required=True,
+        states={'done': [('readonly', True)]},
+        help="Fecha y hora en que se realiza el desmantelamiento"
+    )
+    
     unbuild_line_ids = fields.One2many(
         'mrp.unbuild.line',
         'unbuild_id',
@@ -54,6 +63,13 @@ class MrpUnbuild(models.Model):
         digits='Product Unit of Measure'
     )
     
+    total_no_cost_qty = fields.Float(
+        string='Total Sin Costo',
+        compute='_compute_totals',
+        digits='Product Unit of Measure',
+        help="Cantidad de productos marcados como 'No Distribuir Costos'"
+    )
+    
     yield_percentage = fields.Float(
         string='Rendimiento (%)',
         compute='_compute_totals',
@@ -74,18 +90,29 @@ class MrpUnbuild(models.Model):
             unbuild.show_unbuild_lines = unbuild.state in ('ready', 'done')
     
     @api.depends('unbuild_line_ids.expected_qty', 'unbuild_line_ids.actual_qty', 
-                 'unbuild_line_ids.is_waste', 'product_qty', 'product_uom_id')
+                 'unbuild_line_ids.is_waste', 'unbuild_line_ids.no_cost_distribution',
+                 'product_qty', 'product_uom_id')
     def _compute_totals(self):
         """Calcula totales y rendimiento"""
         for unbuild in self:
             lines = unbuild.unbuild_line_ids
             unbuild.total_expected_qty = sum(lines.mapped('expected_qty'))
             unbuild.total_actual_qty = sum(lines.mapped('actual_qty'))
-            unbuild.total_waste_qty = sum(lines.filtered('is_waste').mapped('actual_qty'))
+            unbuild.total_waste_qty = sum(
+                lines.filtered('is_waste').mapped('actual_qty')
+            )
+            unbuild.total_no_cost_qty = sum(
+                lines.filtered('no_cost_distribution').mapped('actual_qty')
+            )
             
-            # Calcular rendimiento (productos buenos / cantidad inicial)
+            # Calcular rendimiento (productos con costo / cantidad inicial)
             if unbuild.product_qty > 0:
-                good_qty = unbuild.total_actual_qty - unbuild.total_waste_qty
+                # Solo productos que reciben costo se consideran "buenos"
+                good_qty = sum(
+                    lines.filtered(
+                        lambda l: not l.is_waste and not l.no_cost_distribution
+                    ).mapped('actual_qty')
+                )
                 unbuild.yield_percentage = (good_qty / unbuild.product_qty) * 100
             else:
                 unbuild.yield_percentage = 0.0
@@ -100,7 +127,9 @@ class MrpUnbuild(models.Model):
                 
             # Convertir todo a la misma UoM para comparación
             total_in_product_uom = sum(
-                line.product_uom_id._compute_quantity(line.actual_qty, unbuild.product_uom_id)
+                line.product_uom_id._compute_quantity(
+                    line.actual_qty, unbuild.product_uom_id
+                )
                 for line in unbuild.unbuild_line_ids
             )
             
@@ -142,15 +171,22 @@ class MrpUnbuild(models.Model):
                     continue
                     
                 expected_qty = byproduct.product_qty * factor
+                
+                # Obtener valores de la BoM
+                value_factor = getattr(byproduct, 'value_factor', 1.0)
+                no_cost = getattr(byproduct, 'no_cost_distribution', False)
+                
                 lines_data.append({
                     'sequence': sequence,
                     'product_id': byproduct.product_id.id,
                     'expected_qty': expected_qty,
                     'actual_qty': expected_qty,
                     'product_uom_id': byproduct.product_uom_id.id,
-                    'value_factor_bom': byproduct.value_factor if hasattr(byproduct, 'value_factor') else 1.0,
-                    'value_factor': byproduct.value_factor if hasattr(byproduct, 'value_factor') else 1.0,
-                    'is_waste': False,
+                    'value_factor_bom': value_factor,
+                    'value_factor': value_factor,
+                    'no_cost_distribution_bom': no_cost,
+                    'no_cost_distribution': no_cost,
+                    'is_waste': no_cost and value_factor == 0.0,  # Auto-detectar desecho
                 })
                 sequence += 10
         else:
@@ -165,6 +201,8 @@ class MrpUnbuild(models.Model):
                     'product_uom_id': bom_line.product_uom_id.id,
                     'value_factor_bom': 1.0,
                     'value_factor': 1.0,
+                    'no_cost_distribution_bom': False,
+                    'no_cost_distribution': False,
                     'is_waste': False,
                 })
                 sequence += 10
@@ -184,8 +222,33 @@ class MrpUnbuild(models.Model):
             'tag': 'display_notification',
             'params': {
                 'title': _('Líneas preparadas'),
-                'message': _('Ahora puede ajustar las cantidades reales y marcar productos como desecho.'),
+                'message': _('Ahora puede ajustar las cantidades reales y marcar productos como desecho o sin distribución de costos.'),
                 'type': 'success',
+                'sticky': False,
+            }
+        }
+    
+    def action_cancel(self):
+        """Cancela el desmantelamiento y vuelve a borrador"""
+        self.ensure_one()
+        
+        if self.state == 'done':
+            raise UserError(_('No se puede cancelar un desmantelamiento ya procesado.'))
+        
+        # Limpiar líneas si estamos en ready
+        if self.state == 'ready':
+            self.unbuild_line_ids.unlink()
+        
+        # Volver a borrador
+        self.state = 'draft'
+        
+        return {
+            'type': 'ir.actions.client',
+            'tag': 'display_notification',
+            'params': {
+                'title': _('Desmantelamiento cancelado'),
+                'message': _('El desmantelamiento ha sido cancelado y vuelto a borrador.'),
+                'type': 'warning',
                 'sticky': False,
             }
         }
@@ -197,7 +260,18 @@ class MrpUnbuild(models.Model):
         if not self.unbuild_line_ids:
             raise UserError(_('No hay líneas de desmantelamiento para procesar.'))
         
-        # NUEVA VALIDACIÓN: Verificar que hay suficiente stock disponible
+        # Validar que hay al menos una línea que reciba costos
+        cost_lines = self.unbuild_line_ids.filtered(
+            lambda l: not l.is_waste and not l.no_cost_distribution and l.actual_qty > 0
+        )
+        
+        if not cost_lines:
+            raise ValidationError(_(
+                'Debe haber al menos un producto que reciba distribución de costos.\n'
+                'Todos los productos están marcados como desecho o sin distribución de costos.'
+            ))
+        
+        # Verificar que hay suficiente stock disponible
         available_qty = self.env['stock.quant']._get_available_quantity(
             self.product_id, 
             self.location_id, 
@@ -207,7 +281,6 @@ class MrpUnbuild(models.Model):
         
         if float_compare(available_qty, self.product_qty, 
                          precision_rounding=self.product_uom_id.rounding) < 0:
-            # Si hay lote especificado, incluirlo en el mensaje
             if self.lot_id:
                 raise ValidationError(_(
                     'Stock insuficiente del producto %(product)s con lote %(lot)s.\n'
@@ -252,11 +325,24 @@ class MrpUnbuild(models.Model):
         
         # Validar lotes si es necesario
         for line in self.unbuild_line_ids:
-            if line.product_id.tracking != 'none' and not line.lot_id:
+            if line.product_id.tracking != 'none' and not line.lot_id and line.actual_qty > 0:
                 raise ValidationError(_(
                     'Debe especificar un lote para el producto %s', 
                     line.product_id.display_name
                 ))
+        
+        # Validar que la suma de cost_share sea 1.0
+        total_share = sum(
+            line.cost_share 
+            for line in self.unbuild_line_ids 
+            if not line.is_waste and not line.no_cost_distribution
+        )
+        
+        if cost_lines and abs(total_share - 1.0) > 0.0001:
+            raise ValidationError(_(
+                'Error interno: La distribución de costos suma %.4f en lugar de 1.0000.\n'
+                'Por favor, contacte al administrador del sistema.'
+            ) % total_share)
         
         return True
     
@@ -273,7 +359,6 @@ class MrpUnbuild(models.Model):
         else:
             # Para unbuild estándar, también validar stock
             if self.state == 'draft':
-                # Validar stock disponible antes de procesar
                 available_qty = self.env['stock.quant']._get_available_quantity(
                     self.product_id, 
                     self.location_id, 
@@ -283,7 +368,6 @@ class MrpUnbuild(models.Model):
                 
                 if float_compare(available_qty, self.product_qty, 
                                precision_rounding=self.product_uom_id.rounding) < 0:
-                    # Ofrecer crear ajuste de inventario si no hay suficiente stock
                     return {
                         'name': _('Stock Insuficiente'),
                         'type': 'ir.actions.act_window',
@@ -332,12 +416,14 @@ class MrpUnbuild(models.Model):
             'company_id': self.company_id.id,
             'origin': self.name,
             'procure_method': 'make_to_stock',
+            'date': self.unbuild_date,  # Usar fecha del desmantelamiento
         })
         moves |= consume_move
         _logger.info(f"Movimiento de consumo creado: {consume_move.name}")
         
         # 2. Movimientos de producción (entrada de subproductos)
-        for line in self.unbuild_line_ids:
+        # Solo procesar líneas con cantidad > 0
+        for line in self.unbuild_line_ids.filtered(lambda l: l.actual_qty > 0):
             # Determinar ubicación destino
             if line.is_waste:
                 scrap_location = self.env['stock.location'].search([
@@ -351,14 +437,18 @@ class MrpUnbuild(models.Model):
                 dest_location = self.location_dest_id
             
             # Calcular el precio unitario basado en la distribución de costos
-            if line.is_waste:
+            if line.is_waste or line.no_cost_distribution:
                 price_unit = 0.0
             else:
-                # Usar el cost_share calculado (que ya considera el factor de valor)
+                # Usar el cost_share calculado
                 line_cost = total_cost * line.cost_share
                 price_unit = line_cost / line.actual_qty if line.actual_qty > 0 else 0.0
             
-            _logger.info(f"Creando movimiento para {line.product_id.name}: qty={line.actual_qty}, price={price_unit}")
+            _logger.info(
+                f"Creando movimiento para {line.product_id.name}: "
+                f"qty={line.actual_qty}, price={price_unit}, "
+                f"no_cost={line.no_cost_distribution}, waste={line.is_waste}"
+            )
             
             produce_move = self.env['stock.move'].create({
                 'name': self.name,
@@ -371,7 +461,8 @@ class MrpUnbuild(models.Model):
                 'company_id': self.company_id.id,
                 'origin': self.name,
                 'procure_method': 'make_to_stock',
-                'price_unit': price_unit,  # IMPORTANTE: Establecer el precio unitario
+                'price_unit': price_unit,
+                'date': self.unbuild_date,  # Usar fecha del desmantelamiento
             })
             moves |= produce_move
         
@@ -413,7 +504,7 @@ class MrpUnbuild(models.Model):
         # 5. Marcar como picked
         moves.picked = True
         
-        # 6. IMPORTANTE: Añadir contexto para evitar corrección de costos
+        # 6. Añadir contexto para evitar corrección de costos
         moves = moves.with_context(
             skip_unbuild_cost_correction=True,
             custom_unbuild_lines=True
@@ -470,31 +561,47 @@ class MrpUnbuild(models.Model):
         message_body = _(
             "<b>Desmantelamiento completado:</b><br/>"
             "Producto: %(product)s - %(qty)s %(uom)s<br/>"
+            "Fecha: %(date)s<br/>"
             "<b>Resultados:</b><br/>",
             product=self.product_id.display_name,
             qty=self.product_qty,
-            uom=self.product_uom_id.name
+            uom=self.product_uom_id.name,
+            date=self.unbuild_date.strftime('%d/%m/%Y %H:%M')
         )
         
-        # Agregar detalles de productos buenos
-        good_lines = self.unbuild_line_ids.filtered(lambda l: not l.is_waste)
-        if good_lines:
-            message_body += _("<u>Productos:</u><br/>")
-            for line in good_lines:
-                # Obtener el costo total del producto
-                total_cost = self._get_product_total_cost()
+        # Agregar detalles de productos con costo
+        cost_lines = self.unbuild_line_ids.filtered(
+            lambda l: not l.is_waste and not l.no_cost_distribution and l.actual_qty > 0
+        )
+        if cost_lines:
+            message_body += _("<u>Productos con distribución de costo:</u><br/>")
+            total_cost = self._get_product_total_cost()
+            for line in cost_lines:
                 line_cost = total_cost * line.cost_share
-                
-                message_body += _("- %(product)s: %(qty)s %(uom)s (Costo: %(cost)s Bs.D - %(percent).1f%%)<br/>",
+                message_body += _(
+                    "- %(product)s: %(qty)s %(uom)s (Costo: %(cost).2f Bs.D - %(percent).1f%%)<br/>",
                     product=line.product_id.display_name,
                     qty=line.actual_qty,
                     uom=line.product_uom_id.name,
-                    cost=round(line_cost, 2),
+                    cost=line_cost,
                     percent=line.cost_share * 100
                 )
         
+        # Agregar productos sin costo
+        no_cost_lines = self.unbuild_line_ids.filtered(
+            lambda l: not l.is_waste and l.no_cost_distribution and l.actual_qty > 0
+        )
+        if no_cost_lines:
+            message_body += _("<u>Productos sin distribución de costo:</u><br/>")
+            for line in no_cost_lines:
+                message_body += _("- %(product)s: %(qty)s %(uom)s<br/>",
+                    product=line.product_id.display_name,
+                    qty=line.actual_qty,
+                    uom=line.product_uom_id.name
+                )
+        
         # Agregar detalles de desechos
-        waste_lines = self.unbuild_line_ids.filtered('is_waste')
+        waste_lines = self.unbuild_line_ids.filtered(lambda l: l.is_waste and l.actual_qty > 0)
         if waste_lines:
             message_body += _("<u>Desechos:</u><br/>")
             for line in waste_lines:
@@ -555,9 +662,7 @@ class StockMove(models.Model):
         for svl in unbuild_svls:
             unbuild = svl.stock_move_id.unbuild_id
             
-            # IMPORTANTE: Solo procesar si:
-            # 1. Hay MO asociado
-            # 2. NO hay líneas personalizadas
+            # Solo procesar si hay MO asociado y NO hay líneas personalizadas
             if not unbuild.mo_id:
                 _logger.info(f"Unbuild {unbuild.name} no tiene MO, saltando corrección")
                 continue
@@ -627,7 +732,7 @@ class StockMove(models.Model):
         if (self.consume_unbuild_id and 
             self.consume_unbuild_id.unbuild_line_ids and 
             self.price_unit is not False and
-            self.price_unit > 0):
+            self.price_unit >= 0):  # Permitir price_unit = 0 para productos sin costo
             
             _logger.info(f"Creando SVL personalizado para {self.product_id.name} con precio {self.price_unit}")
             
@@ -642,7 +747,7 @@ class StockMove(models.Model):
                     continue
                 
                 quantity = forced_quantity or valued_quantity
-                # Usar el price_unit que establecimos
+                # Usar el price_unit que establecimos (puede ser 0)
                 unit_cost = move.price_unit
                 
                 svl_vals = {
@@ -665,7 +770,6 @@ class StockMove(models.Model):
 
 
 # Monkey patch para asegurar que funcione
-# IMPORTANTE: Este es un último recurso pero necesario
 from odoo.addons.mrp_account.models import stock_move as mrp_stock_move
 
 original_create_out_svl = mrp_stock_move.StockMove._create_out_svl
